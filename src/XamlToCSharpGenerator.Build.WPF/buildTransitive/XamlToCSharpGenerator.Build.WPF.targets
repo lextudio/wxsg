@@ -29,6 +29,19 @@
     <AvaloniaSourceGenGlobalXmlnsPrefixes
       Condition="'$(AvaloniaSourceGenGlobalXmlnsPrefixes)' == '' and '$(RootNamespace)' != '' and '$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' == 'true'"
       >local=clr-namespace:$(RootNamespace)</AvaloniaSourceGenGlobalXmlnsPrefixes>
+
+    <AvaloniaSourceGenImplicitProjectNamespacesEnabled
+      Condition="'$(AvaloniaSourceGenImplicitProjectNamespacesEnabled)' == '' and '$(WpfXsgVisualBasicMode)' == 'true'"
+      >true</AvaloniaSourceGenImplicitProjectNamespacesEnabled>
+
+    <!--
+      VB WPF templates commonly use unqualified x:Class values (for example "MainWindow").
+      Enable path/root-namespace class inference so AXSG can map those to
+      $(RootNamespace).<FileName> and bind the existing partial class.
+    -->
+    <AvaloniaSourceGenInferClassFromPath
+      Condition="'$(AvaloniaSourceGenInferClassFromPath)' == '' and '$(WpfXsgVisualBasicMode)' == 'true'"
+      >true</AvaloniaSourceGenInferClassFromPath>
   </PropertyGroup>
 
   <!--
@@ -46,6 +59,7 @@
     <CompilerVisibleProperty Include="XamlSourceGenEnabled" />
     <CompilerVisibleProperty Include="RootNamespace" />
     <CompilerVisibleProperty Include="AvaloniaSourceGenGlobalXmlnsPrefixes" />
+    <CompilerVisibleProperty Include="AvaloniaSourceGenInferClassFromPath" />
     <CompilerVisibleProperty Include="WpfXsgTargetLanguage" />
   </ItemGroup>
 
