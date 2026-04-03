@@ -45,6 +45,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
     private static readonly string[] WpfPresentationFallbackClrNamespaces =
     {
         "System.Windows",
+        "System.Windows.Automation",
         "System.Windows.Controls",
         "System.Windows.Controls.Primitives",
         "System.Windows.Documents",
@@ -138,7 +139,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
 
         foreach (var propertyElement in node.PropertyElements)
         {
-            propertyElementAssignments.Add(BindPropertyElement(propertyElement, nodeType, context));
+            propertyElementAssignments.Add(BindPropertyElement(propertyElement, node.XmlNamespace, nodeType, context));
         }
 
         var children = ImmutableArray.CreateBuilder<ResolvedObjectNode>();
@@ -202,10 +203,11 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                 return;
             }
 
-            var ownerTypeXmlNamespace = string.IsNullOrWhiteSpace(assignment.XmlNamespace)
-                ? ownerObjectXmlNamespace
-                : assignment.XmlNamespace;
-            var ownerType = ResolveTypeSymbol(ownerTypeXmlNamespace, ownerToken, ImmutableArray<string>.Empty, context);
+            var ownerType = ResolveOwnerQualifiedTypeSymbol(
+                ownerToken,
+                assignment.XmlNamespace,
+                ownerObjectXmlNamespace,
+                context);
             if (ownerType is null)
             {
                 context.AddUnknownTypeDiagnostic(ownerToken, assignment.Line, assignment.Column);
@@ -322,6 +324,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
 
     private static ResolvedPropertyElementAssignment BindPropertyElement(
         XamlPropertyElement propertyElement,
+        string ownerObjectXmlNamespace,
         INamedTypeSymbol? objectType,
         BindingContext context)
     {
@@ -343,7 +346,11 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                 out var attachedPropertyName))
         {
             propertyName = attachedPropertyName;
-            var ownerType = ResolveTypeSymbol(propertyElement.XmlNamespace, ownerToken, ImmutableArray<string>.Empty, context);
+            var ownerType = ResolveOwnerQualifiedTypeSymbol(
+                ownerToken,
+                propertyElement.XmlNamespace,
+                ownerObjectXmlNamespace,
+                context);
             if (ownerType is null)
             {
                 context.AddUnknownTypeDiagnostic(ownerToken, propertyElement.Line, propertyElement.Column);
@@ -424,9 +431,21 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             return ImmutableArray<ResolvedNamedElement>.Empty;
         }
 
+        INamedTypeSymbol? classSymbol = null;
+        if (!string.IsNullOrWhiteSpace(context.Document.ClassFullName))
+        {
+            classSymbol = context.Compilation.GetTypeByMetadataName(context.Document.ClassFullName);
+        }
+
         var builder = ImmutableArray.CreateBuilder<ResolvedNamedElement>(namedElements.Length);
         foreach (var element in namedElements)
         {
+            if (classSymbol is not null && classSymbol.GetMembers(element.Name).Length > 0)
+            {
+                // Keep user-authored partial members authoritative and avoid duplicate declarations.
+                continue;
+            }
+
             var type = ResolveTypeSymbol(element.XmlNamespace, element.XmlTypeName, ImmutableArray<string>.Empty, context);
             if (type is null)
             {
@@ -854,20 +873,88 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         string rawValue,
         BindingContext context)
     {
-        if (TryParseInlineCSharpExpression(rawValue, context, out var csharpExpression))
+        if (TryParseCsPrefixExpression(rawValue, out var csharpPrefixedExpression))
         {
-            return (csharpExpression, ResolvedValueKind.MarkupExtension);
+            return (csharpPrefixedExpression, ResolvedValueKind.MarkupExtension);
         }
 
-        // Detect {Binding ...} — keep the raw XAML string as ValueExpression so the emitter
-        // can parse it and emit a SetBinding call.
-        if (MarkupParser.TryParseMarkupExtension(rawValue, out var markupInfo) &&
-            string.Equals(markupInfo.Name, "Binding", StringComparison.OrdinalIgnoreCase))
+        if (MarkupParser.TryParseMarkupExtension(rawValue, out var markupInfo))
         {
-            return (rawValue, ResolvedValueKind.Binding);
+            var markupKind = XamlMarkupExtensionNameSemantics.Classify(markupInfo.Name);
+            switch (markupKind)
+            {
+                // Detect {Binding ...} — keep the raw XAML string as ValueExpression so the emitter
+                // can parse it and emit a SetBinding call.
+                case XamlMarkupExtensionKind.Binding:
+                    return (rawValue, ResolvedValueKind.Binding);
+                case XamlMarkupExtensionKind.Type:
+                    if (TryConvertTypeMarkupExtension(markupInfo, context, out var typeExpression))
+                    {
+                        return (typeExpression, ResolvedValueKind.MarkupExtension);
+                    }
+
+                    break;
+                case XamlMarkupExtensionKind.CSharp:
+                    if (TryParseInlineCSharpExpression(rawValue, context, out var csharpExpression))
+                    {
+                        return (csharpExpression, ResolvedValueKind.MarkupExtension);
+                    }
+
+                    break;
+            }
+
+            // For non-CSharp markup extensions, keep the source text as a literal.
+            // The emitter can later lower known forms (x:Type/x:Static/DynamicResource/etc.).
+            return (AsStringLiteral(rawValue), ResolvedValueKind.Literal);
+        }
+
+        if (TryParseInlineCSharpExpression(rawValue, context, out var fallbackCsharpExpression))
+        {
+            return (fallbackCsharpExpression, ResolvedValueKind.MarkupExtension);
         }
 
         return (AsStringLiteral(rawValue), ResolvedValueKind.Literal);
+    }
+
+    private static bool TryConvertTypeMarkupExtension(
+        MarkupExtensionInfo markupInfo,
+        BindingContext context,
+        out string typeExpression)
+    {
+        typeExpression = string.Empty;
+        string? rawTypeToken = null;
+
+        if (markupInfo.NamedArguments.TryGetValue("Type", out var namedTypeToken) ||
+            markupInfo.NamedArguments.TryGetValue("TypeName", out namedTypeToken))
+        {
+            rawTypeToken = namedTypeToken;
+        }
+        else if (markupInfo.PositionalArguments.Length > 0)
+        {
+            rawTypeToken = markupInfo.PositionalArguments[0];
+        }
+
+        if (string.IsNullOrWhiteSpace(rawTypeToken))
+        {
+            return false;
+        }
+
+        var typeToken = XamlQuotedValueSemantics.TrimAndUnquote(rawTypeToken).Trim();
+        if (typeToken.Length == 0)
+        {
+            return false;
+        }
+
+        var resolvedType = ResolveTypeToken(typeToken, context);
+        if (resolvedType is null)
+        {
+            return false;
+        }
+
+        var displayName = resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", string.Empty);
+        typeExpression = "typeof(" + displayName + ")";
+        return true;
     }
 
     private static bool TryParseInlineCSharpExpression(
@@ -998,6 +1085,46 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
     private static string AsStringLiteral(string value)
     {
         return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+    }
+
+    private static INamedTypeSymbol? ResolveOwnerQualifiedTypeSymbol(
+        string ownerToken,
+        string? explicitXmlNamespace,
+        string? ownerObjectXmlNamespace,
+        BindingContext context)
+    {
+        var token = ownerToken;
+        if (XamlTokenSplitSemantics.TrySplitAtFirstSeparator(ownerToken, ':', out var prefix, out var xmlTypeName) &&
+            context.Document.XmlNamespaces.TryGetValue(prefix, out var prefixXmlNamespace))
+        {
+            token = xmlTypeName;
+            return ResolveTypeSymbol(prefixXmlNamespace, token, ImmutableArray<string>.Empty, context);
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitXmlNamespace))
+        {
+            var resolved = ResolveTypeSymbol(explicitXmlNamespace!, token, ImmutableArray<string>.Empty, context);
+            if (resolved is not null)
+            {
+                return resolved;
+            }
+        }
+
+        if (context.Document.XmlNamespaces.TryGetValue(string.Empty, out var defaultXmlNamespace))
+        {
+            var resolved = ResolveTypeSymbol(defaultXmlNamespace, token, ImmutableArray<string>.Empty, context);
+            if (resolved is not null)
+            {
+                return resolved;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(ownerObjectXmlNamespace))
+        {
+            return ResolveTypeSymbol(ownerObjectXmlNamespace!, token, ImmutableArray<string>.Empty, context);
+        }
+
+        return null;
     }
 
     private static string AppendGenericArity(string xmlTypeName, int? genericArity)

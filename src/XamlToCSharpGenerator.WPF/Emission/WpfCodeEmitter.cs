@@ -56,7 +56,14 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         var indent = hasNs ? "    " : string.Empty;
         var emitter = new GraphEmitter(viewModel, sb, indent + "    ");
 
-        sb.AppendLine(indent + modifier + " partial class " + className);
+        var classDeclaration = indent + modifier + " partial class " + className;
+        var baseTypeName = ResolveBaseTypeName(viewModel, doc);
+        if (!string.IsNullOrEmpty(baseTypeName))
+        {
+            classDeclaration += " : " + baseTypeName;
+        }
+
+        sb.AppendLine(classDeclaration);
         sb.AppendLine(indent + "{");
 
         foreach (var element in viewModel.NamedElements)
@@ -118,7 +125,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "private void __WXSG_BuildObjectGraph()");
         sb.AppendLine(i + "{");
         sb.AppendLine(i + "    var __root = this;");
-        emitter.EmitNodeInitialization(viewModel.RootObject, "__root", isRootNode: true);
+        emitter.EmitNodeInitialization(viewModel.RootObject, "__root", isRootNode: true, ambientStyleTargetTypeExpression: null);
         sb.AppendLine(i + "}");
         sb.AppendLine();
 
@@ -135,6 +142,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine();
 
         EmitHotReloadReset(emitter, viewModel);
+        EmitRuntimeResolutionHelpers(emitter);
     }
 
     private static void EmitHotReloadReset(GraphEmitter emitter, ResolvedViewModel viewModel)
@@ -188,6 +196,251 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    if (__clearMethod is not null)");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        __clearMethod.Invoke(__value, null);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "}");
+    }
+
+    private static void EmitRuntimeResolutionHelpers(GraphEmitter emitter)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        sb.AppendLine();
+        sb.AppendLine(i + "private static global::System.Type __WXSG_ResolveTypeToken(string __token)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__token))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Empty type token.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __trimmed = __token.Trim();");
+        sb.AppendLine(i + "    var __colonIndex = __trimmed.IndexOf(':');");
+        sb.AppendLine(i + "    if (__colonIndex >= 0 && __colonIndex < __trimmed.Length - 1)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __trimmed = __trimmed.Substring(__colonIndex + 1);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __direct = global::System.Type.GetType(__trimmed, throwOnError: false);");
+        sb.AppendLine(i + "    if (__direct is not null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __direct;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __knownNamespaces = new[]");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        \"System.Windows\",");
+        sb.AppendLine(i + "        \"System.Windows.Automation\",");
+        sb.AppendLine(i + "        \"System.Windows.Controls\",");
+        sb.AppendLine(i + "        \"System.Windows.Controls.Primitives\",");
+        sb.AppendLine(i + "        \"System.Windows.Documents\",");
+        sb.AppendLine(i + "        \"System.Windows.Input\",");
+        sb.AppendLine(i + "        \"System.Windows.Media\",");
+        sb.AppendLine(i + "        \"System.Windows.Media.Animation\",");
+        sb.AppendLine(i + "        \"System.Windows.Navigation\",");
+        sb.AppendLine(i + "        \"System.Windows.Shapes\"");
+        sb.AppendLine(i + "    };");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __assemblies = global::System.AppDomain.CurrentDomain.GetAssemblies();");
+        sb.AppendLine(i + "    foreach (var __assembly in __assemblies)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __byName = __assembly.GetType(__trimmed, throwOnError: false);");
+        sb.AppendLine(i + "        if (__byName is not null)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return __byName;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "        foreach (var __ns in __knownNamespaces)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            var __candidate = __assembly.GetType(__ns + \".\" + __trimmed, throwOnError: false);");
+        sb.AppendLine(i + "            if (__candidate is not null)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                return __candidate;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    foreach (var __assembly in __assemblies)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        global::System.Type[] __types;");
+        sb.AppendLine(i + "        try");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __types = __assembly.GetTypes();");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "        catch (global::System.Reflection.ReflectionTypeLoadException __rtl)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __types = __rtl.Types;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "        foreach (var __candidate in __types)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            if (__candidate is null)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                continue;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "            if (string.Equals(__candidate.Name, __trimmed, global::System.StringComparison.Ordinal))");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                return __candidate;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve type token '\" + __token + \"'.\");");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+
+        sb.AppendLine(i + "private static global::System.Windows.DependencyProperty __WXSG_ResolveSetterDependencyProperty(string __token, global::System.Type __styleTargetType)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__token))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Empty dependency property token.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __trimmed = __token.Trim();");
+        sb.AppendLine(i + "    var __lastDot = __trimmed.LastIndexOf('.');");
+        sb.AppendLine(i + "    string __ownerToken = null;");
+        sb.AppendLine(i + "    string __propertyToken;");
+        sb.AppendLine(i + "    if (__lastDot > 0)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __ownerToken = __trimmed.Substring(0, __lastDot);");
+        sb.AppendLine(i + "        __propertyToken = __trimmed.Substring(__lastDot + 1);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __propertyToken = __trimmed;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __ownerPrefixSeparator = __ownerToken is null ? -1 : __ownerToken.IndexOf(':');");
+        sb.AppendLine(i + "    if (__ownerPrefixSeparator >= 0 && __ownerPrefixSeparator < __ownerToken.Length - 1)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __ownerToken = __ownerToken.Substring(__ownerPrefixSeparator + 1);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __propertyPrefixSeparator = __propertyToken.IndexOf(':');");
+        sb.AppendLine(i + "    if (__propertyPrefixSeparator >= 0 && __propertyPrefixSeparator < __propertyToken.Length - 1)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __propertyToken = __propertyToken.Substring(__propertyPrefixSeparator + 1);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __fieldName = __propertyToken + \"Property\";");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    if (!string.IsNullOrWhiteSpace(__ownerToken))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __ownerType = __WXSG_ResolveTypeToken(__ownerToken);");
+        sb.AppendLine(i + "        var __ownerField = __ownerType.GetField(__fieldName, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+        sb.AppendLine(i + "        if (__ownerField?.GetValue(null) is global::System.Windows.DependencyProperty __ownerDp)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return __ownerDp;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    for (var __type = __styleTargetType; __type is not null; __type = __type.BaseType)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __field = __type.GetField(__fieldName, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+        sb.AppendLine(i + "        if (__field?.GetValue(null) is global::System.Windows.DependencyProperty __dp)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return __dp;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve dependency property token '\" + __token + \"'.\");");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+        sb.AppendLine(i + "private static object __WXSG_ResolveStaticResource(string __token)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__token))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Empty StaticResource token.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __trimmed = __token.Trim();");
+        sb.AppendLine(i + "    const string __open = \"{StaticResource \";");
+        sb.AppendLine(i + "    if (!__trimmed.StartsWith(__open, global::System.StringComparison.Ordinal) || !__trimmed.EndsWith(\"}\", global::System.StringComparison.Ordinal))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Unsupported StaticResource token '\" + __token + \"'.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __inner = __trimmed.Substring(__open.Length, __trimmed.Length - __open.Length - 1).Trim();");
+        sb.AppendLine(i + "    object __key = __inner;");
+        sb.AppendLine(i + "    const string __xStaticOpen = \"{x:Static \";");
+        sb.AppendLine(i + "    if (__inner.StartsWith(__xStaticOpen, global::System.StringComparison.Ordinal) && __inner.EndsWith(\"}\", global::System.StringComparison.Ordinal))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __memberToken = __inner.Substring(__xStaticOpen.Length, __inner.Length - __xStaticOpen.Length - 1).Trim();");
+        sb.AppendLine(i + "        var __memberDot = __memberToken.LastIndexOf('.');");
+        sb.AppendLine(i + "        if (__memberDot > 0 && __memberDot < __memberToken.Length - 1)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            var __ownerToken = __memberToken.Substring(0, __memberDot);");
+        sb.AppendLine(i + "            var __memberName = __memberToken.Substring(__memberDot + 1);");
+        sb.AppendLine(i + "            var __ownerType = __WXSG_ResolveTypeToken(__ownerToken);");
+        sb.AppendLine(i + "            var __flags = global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy;");
+        sb.AppendLine(i + "            var __property = __ownerType.GetProperty(__memberName, __flags);");
+        sb.AppendLine(i + "            if (__property is not null)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                __key = __property.GetValue(null);");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "            else");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                var __field = __ownerType.GetField(__memberName, __flags);");
+        sb.AppendLine(i + "                if (__field is not null)");
+        sb.AppendLine(i + "                {");
+        sb.AppendLine(i + "                    __key = __field.GetValue(null);");
+        sb.AppendLine(i + "                }");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __app = global::System.Windows.Application.Current;");
+        sb.AppendLine(i + "    var __resource = __app?.TryFindResource(__key);");
+        sb.AppendLine(i + "    return __resource;");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+        sb.AppendLine(i + "private static object __WXSG_ConvertSetterValue(global::System.Windows.DependencyProperty __property, object __rawValue)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (__property is null || __rawValue is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __rawValue;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    if (__rawValue is not string __text)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __rawValue;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __targetType = __property.PropertyType;");
+        sb.AppendLine(i + "    if (__targetType == typeof(string))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __text;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    try");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __converter = global::System.ComponentModel.TypeDescriptor.GetConverter(__targetType);");
+        sb.AppendLine(i + "        if (__converter is not null && __converter.CanConvertFrom(typeof(string)))");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            var __converted = __converter.ConvertFromInvariantString(__text);");
+        sb.AppendLine(i + "            if (__converted is not null)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                return __converted;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    catch");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    try");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __nonNullable = global::System.Nullable.GetUnderlyingType(__targetType) ?? __targetType;");
+        sb.AppendLine(i + "        if (__nonNullable.IsEnum)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return global::System.Enum.Parse(__nonNullable, __text, ignoreCase: true);");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "        return global::System.Convert.ChangeType(__text, __nonNullable, global::System.Globalization.CultureInfo.InvariantCulture);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    catch");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __rawValue;");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "}");
     }
@@ -288,46 +541,57 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return valueExpression;
         }
 
+        if (literalValue.StartsWith("{StaticResource ", StringComparison.Ordinal) &&
+            literalValue.EndsWith("}", StringComparison.Ordinal))
+        {
+            return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveStaticResource(" + valueExpression + ")";
+        }
+
+        if (normalizedType == "Type" || normalizedType == "System.Type")
+        {
+            return "__WXSG_ResolveTypeToken(" + valueExpression + ")";
+        }
+
         if (normalizedType == "bool" || normalizedType == "System.Boolean")
         {
             return bool.TryParse(literalValue, out var boolValue)
                 ? (boolValue ? "true" : "false")
-                : valueExpression;
+                : ConvertViaTypeConverter(normalizedType, valueExpression);
         }
 
         if (normalizedType == "int" || normalizedType == "System.Int32")
         {
             return int.TryParse(literalValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var intValue)
                 ? intValue.ToString(CultureInfo.InvariantCulture)
-                : valueExpression;
+                : ConvertViaTypeConverter(normalizedType, valueExpression);
         }
 
         if (normalizedType == "long" || normalizedType == "System.Int64")
         {
             return long.TryParse(literalValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longValue)
                 ? longValue.ToString(CultureInfo.InvariantCulture) + "L"
-                : valueExpression;
+                : ConvertViaTypeConverter(normalizedType, valueExpression);
         }
 
         if (normalizedType == "double" || normalizedType == "System.Double")
         {
             return double.TryParse(literalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue)
                 ? doubleValue.ToString("R", CultureInfo.InvariantCulture)
-                : valueExpression;
+                : ConvertViaTypeConverter(normalizedType, valueExpression);
         }
 
         if (normalizedType == "float" || normalizedType == "System.Single")
         {
             return float.TryParse(literalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var floatValue)
                 ? floatValue.ToString("R", CultureInfo.InvariantCulture) + "f"
-                : valueExpression;
+                : ConvertViaTypeConverter(normalizedType, valueExpression);
         }
 
         if (normalizedType == "decimal" || normalizedType == "System.Decimal")
         {
             return decimal.TryParse(literalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var decimalValue)
                 ? decimalValue.ToString(CultureInfo.InvariantCulture) + "m"
-                : valueExpression;
+                : ConvertViaTypeConverter(normalizedType, valueExpression);
         }
 
         if (normalizedType.EndsWith("?", StringComparison.Ordinal))
@@ -341,6 +605,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return ConvertLiteralExpression(valueExpression, innerType);
         }
 
+        return ConvertViaTypeConverter(normalizedType, valueExpression);
+    }
+
+    private static string ConvertViaTypeConverter(string normalizedType, string valueExpression)
+    {
         var qualifiedType = QualifyType(normalizedType);
         return "(" + qualifiedType + ")global::System.ComponentModel.TypeDescriptor.GetConverter(typeof(" +
                qualifiedType + ")).ConvertFromInvariantString(" + valueExpression + ")";
@@ -367,9 +636,49 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return "object";
         }
 
-        return typeName.StartsWith("global::", StringComparison.Ordinal)
-            ? typeName
-            : "global::" + typeName;
+        var trimmed = typeName.Trim();
+        switch (trimmed)
+        {
+            case "bool":
+            case "byte":
+            case "sbyte":
+            case "short":
+            case "ushort":
+            case "int":
+            case "uint":
+            case "long":
+            case "ulong":
+            case "float":
+            case "double":
+            case "decimal":
+            case "char":
+            case "string":
+            case "object":
+            case "void":
+                return trimmed;
+        }
+
+        return trimmed.StartsWith("global::", StringComparison.Ordinal)
+            ? trimmed
+            : "global::" + trimmed;
+    }
+
+    private static string? ResolveBaseTypeName(ResolvedViewModel viewModel, XamlDocumentModel doc)
+    {
+        var rootTypeName = viewModel.RootObject.TypeName;
+        if (string.IsNullOrWhiteSpace(rootTypeName))
+        {
+            return null;
+        }
+
+        var normalizedRoot = rootTypeName.Replace("global::", string.Empty);
+        if (!string.IsNullOrWhiteSpace(doc.ClassFullName) &&
+            string.Equals(normalizedRoot, doc.ClassFullName, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return QualifyType(rootTypeName);
     }
 
     private sealed class GraphEmitter
@@ -398,13 +707,23 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
         public string MemberIndent { get; }
 
-        public void EmitNodeInitialization(ResolvedObjectNode node, string instanceVariable, bool isRootNode)
+        public void EmitNodeInitialization(
+            ResolvedObjectNode node,
+            string instanceVariable,
+            bool isRootNode,
+            string? ambientStyleTargetTypeExpression)
         {
+            var nextAmbientStyleTargetTypeExpression = ambientStyleTargetTypeExpression;
+            if (string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Style", StringComparison.Ordinal))
+            {
+                nextAmbientStyleTargetTypeExpression = instanceVariable + ".TargetType";
+            }
+
             EmitNamedFieldAssignment(node, instanceVariable);
-            EmitPropertyAssignments(node, instanceVariable);
+            EmitPropertyAssignments(node, instanceVariable, nextAmbientStyleTargetTypeExpression);
             EmitPropertyElementAssignments(node, instanceVariable);
             EmitEventSubscriptions(node, instanceVariable);
-            EmitChildNodes(node, instanceVariable);
+            EmitChildNodes(node, instanceVariable, nextAmbientStyleTargetTypeExpression);
 
             if (isRootNode && !string.IsNullOrWhiteSpace(node.Name))
             {
@@ -422,7 +741,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             Builder.AppendLine(MemberIndent + "    this." + node.Name + " = (" + QualifyType(fieldType) + ")" + instanceVariable + ";");
         }
 
-        private void EmitPropertyAssignments(ResolvedObjectNode node, string instanceVariable)
+        private void EmitPropertyAssignments(
+            ResolvedObjectNode node,
+            string instanceVariable,
+            string? ambientStyleTargetTypeExpression)
         {
             foreach (var assignment in node.PropertyAssignments)
             {
@@ -435,7 +757,31 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 // {Binding ...} — emit a SetBinding call instead of a direct property assignment.
                 if (assignment.ValueKind == ResolvedValueKind.Binding)
                 {
-                    EmitSetBinding(assignment, instanceVariable);
+                    EmitSetBinding(node.TypeName, assignment, instanceVariable);
+                    continue;
+                }
+
+                if (ambientStyleTargetTypeExpression is not null &&
+                    string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Setter", StringComparison.Ordinal) &&
+                    string.Equals(assignment.PropertyName, "Property", StringComparison.Ordinal) &&
+                    (string.Equals(assignment.ClrPropertyTypeName?.Replace("global::", string.Empty), "System.Windows.DependencyProperty", StringComparison.Ordinal) ||
+                     string.Equals(assignment.ClrPropertyTypeName, "DependencyProperty", StringComparison.Ordinal)))
+                {
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        instanceVariable + "." + assignment.PropertyName + " = " +
+                        "__WXSG_ResolveSetterDependencyProperty(" + assignment.ValueExpression + ", " + ambientStyleTargetTypeExpression + ");");
+                    continue;
+                }
+
+                if (string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Setter", StringComparison.Ordinal) &&
+                    string.Equals(assignment.PropertyName, "Value", StringComparison.Ordinal))
+                {
+                    var convertedSetterValue = ConvertLiteralExpression(assignment.ValueExpression, assignment.ClrPropertyTypeName);
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        instanceVariable + "." + assignment.PropertyName + " = " +
+                        "__WXSG_ConvertSetterValue(" + instanceVariable + ".Property, " + convertedSetterValue + ");");
                     continue;
                 }
 
@@ -456,7 +802,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             }
         }
 
-        private void EmitSetBinding(ResolvedPropertyAssignment assignment, string instanceVariable)
+        private void EmitSetBinding(string? instanceTypeName, ResolvedPropertyAssignment assignment, string instanceVariable)
         {
             // Re-parse the raw XAML binding expression stored in ValueExpression.
             if (!MarkupParser.TryParseMarkupExtension(assignment.ValueExpression, out var info))
@@ -484,14 +830,54 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             if (initParts.Count > 0)
                 bindingExpr += " { " + string.Join(", ", initParts) + " }";
 
+            if (ShouldAssignBindingDirectly(instanceTypeName, assignment))
+            {
+                Builder.AppendLine(MemberIndent + "    " + instanceVariable +
+                                   "." + assignment.PropertyName + " = " + bindingExpr + ";");
+                return;
+            }
+
             // DependencyProperty field: WPF convention is OwnerType.PropertyNameProperty.
             // For attached properties the framework owner type is stored in FrameworkPayload.
             var ownerTypeName = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId)
                                 ?? assignment.ClrPropertyOwnerTypeName;
             var dpField = QualifyType(ownerTypeName) + "." + assignment.PropertyName + "Property";
 
-            Builder.AppendLine(MemberIndent + "    " + instanceVariable +
-                               ".SetBinding(" + dpField + ", " + bindingExpr + ");");
+            Builder.AppendLine(MemberIndent + "    global::System.Windows.Data.BindingOperations.SetBinding(" +
+                               instanceVariable + ", " + dpField + ", " + bindingExpr + ");");
+        }
+
+        private static bool ShouldAssignBindingDirectly(string? instanceTypeName, ResolvedPropertyAssignment assignment)
+        {
+            var propertyTypeName = assignment.ClrPropertyTypeName ?? string.Empty;
+            var propertyName = assignment.PropertyName ?? string.Empty;
+            var instanceType = instanceTypeName ?? string.Empty;
+
+            // Non-DependencyObject-style binding sinks: assign the Binding instance directly.
+            if (propertyTypeName.Contains("System.Windows.Data.BindingBase", StringComparison.Ordinal) ||
+                propertyTypeName.Contains("System.Windows.Data.Binding", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (propertyName.Equals("Binding", StringComparison.Ordinal) &&
+                instanceType.EndsWith(".DataTrigger", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (propertyName.Equals("DisplayMemberBinding", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (propertyName.Equals("Value", StringComparison.Ordinal) &&
+                instanceType.EndsWith(".Setter", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return false;
         }
 
         public void EmitHotReloadCollectionCleanup(ResolvedObjectNode rootNode)
@@ -562,12 +948,30 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 var createdValues = new List<string>(propertyElement.ObjectValues.Length);
                 foreach (var objectValue in propertyElement.ObjectValues)
                 {
-                    createdValues.Add(EmitChildObjectCreation(objectValue));
+                    createdValues.Add(EmitChildObjectCreation(objectValue, ambientStyleTargetTypeExpression: null));
                 }
 
                 var frameworkOwner = propertyElement.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId);
                 if (!string.IsNullOrWhiteSpace(frameworkOwner))
                 {
+                    var normalizedOwner = frameworkOwner.Replace("global::", string.Empty);
+                    if (normalizedOwner == "Microsoft.Xaml.Behaviors.Interaction" &&
+                        (propertyElement.PropertyName.Equals("Behaviors", StringComparison.Ordinal) ||
+                         propertyElement.PropertyName.Equals("Triggers", StringComparison.Ordinal)))
+                    {
+                        var getterName = propertyElement.PropertyName.Equals("Behaviors", StringComparison.Ordinal)
+                            ? "GetBehaviors"
+                            : "GetTriggers";
+                        foreach (var childVariable in createdValues)
+                        {
+                            Builder.AppendLine(
+                                MemberIndent + "    " +
+                                QualifyType(frameworkOwner) + "." + getterName + "(" + instanceVariable + ").Add(" + childVariable + ");");
+                        }
+
+                        continue;
+                    }
+
                     foreach (var childVariable in createdValues)
                     {
                         Builder.AppendLine(
@@ -576,6 +980,13 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                             ".Set" + propertyElement.PropertyName + "(" + instanceVariable + ", " + childVariable + ");");
                     }
 
+                    continue;
+                }
+
+                // WPF template visual trees require FrameworkElementFactory construction.
+                // Until WXSG emits template factories, skip direct object assignment to VisualTree.
+                if (propertyElement.PropertyName.Equals("VisualTree", StringComparison.Ordinal))
+                {
                     continue;
                 }
 
@@ -594,8 +1005,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                         var childVariable = createdValues[index];
                         if (isDictionaryAdd)
                         {
-                            var keyExpression = propertyElement.ObjectValues[index].KeyExpression ??
-                                                AsFallbackDictionaryKey(propertyElement.ObjectValues[index]);
+                            var keyExpression = BuildDictionaryKeyExpression(
+                                propertyElement.PropertyName,
+                                propertyElement.ObjectValues[index],
+                                childVariable);
                             Builder.AppendLine(
                                 MemberIndent + "    " +
                                 instanceVariable + "." + propertyElement.PropertyName + ".Add(" +
@@ -650,7 +1063,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             }
         }
 
-        private void EmitChildNodes(ResolvedObjectNode node, string instanceVariable)
+        private void EmitChildNodes(
+            ResolvedObjectNode node,
+            string instanceVariable,
+            string? ambientStyleTargetTypeExpression)
         {
             if (node.Children.IsDefaultOrEmpty)
             {
@@ -659,12 +1075,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
             foreach (var child in node.Children)
             {
-                var childVariable = EmitChildObjectCreation(child);
+                var childVariable = EmitChildObjectCreation(child, ambientStyleTargetTypeExpression);
                 AttachChild(node, instanceVariable, child, childVariable);
             }
         }
 
-        private string EmitChildObjectCreation(ResolvedObjectNode child)
+        private string EmitChildObjectCreation(ResolvedObjectNode child, string? ambientStyleTargetTypeExpression)
         {
             var localVariable = "__node" + _localCounter.ToString(CultureInfo.InvariantCulture);
             _localCounter++;
@@ -674,7 +1090,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 : "new " + QualifyType(child.TypeName) + "()";
 
             Builder.AppendLine(MemberIndent + "    var " + localVariable + " = " + creationExpression + ";");
-            EmitNodeInitialization(child, localVariable, isRootNode: false);
+            EmitNodeInitialization(child, localVariable, isRootNode: false, ambientStyleTargetTypeExpression);
             return localVariable;
         }
 
@@ -686,6 +1102,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         {
             var contentProperty = parent.ContentPropertyName;
             if (string.IsNullOrWhiteSpace(contentProperty))
+            {
+                return;
+            }
+
+            if (contentProperty.Equals("VisualTree", StringComparison.Ordinal))
             {
                 return;
             }
@@ -705,7 +1126,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                         parentVariable + "." + contentProperty + ".Add(" + childVariable + ");");
                     return;
                 case ResolvedChildAttachmentMode.DictionaryAdd:
-                    var keyExpression = child.KeyExpression ?? AsFallbackDictionaryKey(child);
+                    var keyExpression = BuildDictionaryKeyExpression(contentProperty, child, childVariable);
                     Builder.AppendLine(
                         MemberIndent + "    " +
                         parentVariable + "." + contentProperty + ".Add(" + keyExpression + ", " + childVariable + ");");
@@ -713,6 +1134,25 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 default:
                     return;
             }
+        }
+
+        private static string BuildDictionaryKeyExpression(
+            string? parentPropertyName,
+            ResolvedObjectNode child,
+            string childVariable)
+        {
+            if (!string.IsNullOrWhiteSpace(child.KeyExpression))
+            {
+                return child.KeyExpression;
+            }
+
+            if (string.Equals(parentPropertyName, "Resources", StringComparison.Ordinal) &&
+                string.Equals(child.TypeName.Replace("global::", string.Empty), "System.Windows.Style", StringComparison.Ordinal))
+            {
+                return childVariable + ".TargetType";
+            }
+
+            return AsFallbackDictionaryKey(child);
         }
 
         private static bool IsCollectionLikeTypeName(string? typeName)

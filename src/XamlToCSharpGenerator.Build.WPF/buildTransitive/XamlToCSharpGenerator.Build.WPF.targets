@@ -66,6 +66,16 @@
       <ApplicationDefinition Remove="@(ApplicationDefinition)" />
 
       <!--
+        Keep XAML available to WPF's pack URI resource loader (ResourceDictionary.Source,
+        pack://application:,,,/...) by re-materializing moved XAML as Resource items.
+        Without this, classless dictionaries (for example Themes/*.xaml) disappear from
+        ILSpy.g.resources when Page/ApplicationDefinition are removed.
+      -->
+      <Resource Include="@(None)"
+                KeepDuplicates="false"
+                Condition="'%(None.Extension)' == '.xaml' and '%(None.Filename)%(None.Extension)' != 'App.xaml'" />
+
+      <!--
         Feed XAML files to the WXSG source generator via AdditionalFiles.
         SourceItemGroup=Page / ApplicationDefinition tells WpfFrameworkBuildContract
         which role each file plays (window/control vs. app entry point).
