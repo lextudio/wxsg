@@ -23,7 +23,7 @@ jobs:
           # This automatically creates a nuget.config with the GitHub source
           source-url: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUGET_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Build Solution
         run: dotnet build src/wxsg.slnx --configuration Release
