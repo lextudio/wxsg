@@ -45,13 +45,22 @@ public sealed class WpfFrameworkProfile : IXamlFrameworkProfile
     private static readonly IXamlFrameworkSemanticBinder SemanticBinderInstance =
         new WpfFrameworkSemanticBinder(new WpfSemanticBinder());
 
-    private static readonly IXamlFrameworkEmitter EmitterInstance =
-        new WpfFrameworkEmitter(new WpfCodeEmitter());
+    public static WpfFrameworkProfile Instance { get; } =
+        new("WPF", new WpfCodeEmitter());
 
-    public static WpfFrameworkProfile Instance { get; } = new();
-    private WpfFrameworkProfile() { }
+    public static WpfFrameworkProfile VisualBasicInstance { get; } =
+        new("WPF_VB", new WpfVisualBasicCodeEmitter());
 
-    public string Id => "WPF";
+    private readonly string _profileId;
+    private readonly IXamlFrameworkEmitter _emitter;
+
+    private WpfFrameworkProfile(string profileId, IXamlCodeEmitter emitter)
+    {
+        _profileId = profileId;
+        _emitter = new WpfFrameworkEmitter(emitter);
+    }
+
+    public string Id => _profileId;
 
     public IXamlFrameworkBuildContract BuildContract => BuildContractInstance;
 
@@ -59,7 +68,7 @@ public sealed class WpfFrameworkProfile : IXamlFrameworkProfile
 
     public IXamlFrameworkSemanticBinder CreateSemanticBinder() => SemanticBinderInstance;
 
-    public IXamlFrameworkEmitter CreateEmitter() => EmitterInstance;
+    public IXamlFrameworkEmitter CreateEmitter() => _emitter;
 
     /// <summary>
     /// WPF files carry no document enrichers (Phase 1).

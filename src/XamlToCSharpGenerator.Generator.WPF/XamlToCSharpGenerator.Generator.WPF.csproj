@@ -28,6 +28,7 @@
   <ItemGroup>
     <PackageReference Include="GitVersion.MsBuild" Version="6.0.5" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.VisualBasic" Version="4.10.0" PrivateAssets="all" />
   </ItemGroup>
 
   <!--
@@ -61,5 +62,13 @@
     <None Include="$(OutputPath)XamlToCSharpGenerator.ExpressionSemantics.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="$(OutputPath)XamlToCSharpGenerator.Framework.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="$(OutputPath)XamlToCSharpGenerator.MiniLanguageParsing.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+
+    <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.WPF.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.Compiler.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.Core.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.ExpressionSemantics.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.Framework.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.MiniLanguageParsing.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
   </ItemGroup>
 </Project>

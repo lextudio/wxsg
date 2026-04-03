@@ -27,3 +27,12 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         XamlSourceGeneratorCompilerHost.Initialize(context, WpfFrameworkProfile.Instance);
     }
 }
+
+[Generator(LanguageNames.VisualBasic)]
+public sealed class WpfXamlVisualBasicSourceGenerator : IIncrementalGenerator
+{
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        XamlSourceGeneratorCompilerHost.Initialize(context, WpfFrameworkProfile.VisualBasicInstance);
+    }
+}

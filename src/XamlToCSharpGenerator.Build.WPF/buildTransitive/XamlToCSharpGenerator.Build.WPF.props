@@ -9,6 +9,9 @@
     <!-- Master opt-in switch. Set to true in your project to activate WXSG. -->
     <WpfXsgEnabled Condition="'$(WpfXsgEnabled)' == ''">false</WpfXsgEnabled>
 
+    <!-- Requested source language for WXSG output. -->
+    <WpfXsgTargetLanguage Condition="'$(WpfXsgTargetLanguage)' == ''">CSharp</WpfXsgTargetLanguage>
+
   </PropertyGroup>
 
 </Project>

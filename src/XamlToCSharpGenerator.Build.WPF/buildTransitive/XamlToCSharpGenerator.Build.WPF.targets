@@ -6,7 +6,19 @@
     properties in .targets are evaluated after.
   -->
   <PropertyGroup>
-    <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == '' and '$(WpfXsgEnabled)' == 'true'">true</XamlSourceGenEnabled>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'C#'">CSharp</WpfXsgTargetLanguageNormalized>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'CSharp'">CSharp</WpfXsgTargetLanguageNormalized>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'VB'">VisualBasic</WpfXsgTargetLanguageNormalized>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'VisualBasic'">VisualBasic</WpfXsgTargetLanguageNormalized>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguageNormalized)' == ''">CSharp</WpfXsgTargetLanguageNormalized>
+
+    <WpfXsgCSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'CSharp' and '$(Language)' == 'C#'">true</WpfXsgCSharpMode>
+    <WpfXsgVisualBasicMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'VisualBasic' and '$(Language)' == 'VB'">true</WpfXsgVisualBasicMode>
+
+    <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == '' and ('$(WpfXsgCSharpMode)' == 'true' or '$(WpfXsgVisualBasicMode)' == 'true')">true</WpfXsgLanguageSupported>
+    <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == ''">false</WpfXsgLanguageSupported>
+
+    <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == '' and '$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' == 'true'">true</XamlSourceGenEnabled>
     <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == ''">false</XamlSourceGenEnabled>
 
     <!--
@@ -15,7 +27,7 @@
       Placed in .targets (not .props) so RootNamespace is already set from project content.
     -->
     <AvaloniaSourceGenGlobalXmlnsPrefixes
-      Condition="'$(AvaloniaSourceGenGlobalXmlnsPrefixes)' == '' and '$(RootNamespace)' != '' and '$(WpfXsgEnabled)' == 'true'"
+      Condition="'$(AvaloniaSourceGenGlobalXmlnsPrefixes)' == '' and '$(RootNamespace)' != '' and '$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' == 'true'"
       >local=clr-namespace:$(RootNamespace)</AvaloniaSourceGenGlobalXmlnsPrefixes>
   </PropertyGroup>
 
@@ -24,7 +36,7 @@
     via the generated .editorconfig file. These are in .targets (not .props) so WpfXsgEnabled
     is already evaluated from the project file before this condition is checked.
   -->
-  <ItemGroup Condition="'$(WpfXsgEnabled)' == 'true'">
+  <ItemGroup Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' == 'true'">
     <!-- Per-file metadata: generator reads SourceItemGroup (Page/ApplicationDefinition)
          and TargetPath (for pack URI computation) from each AdditionalFiles entry. -->
     <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="SourceItemGroup" />
@@ -34,6 +46,7 @@
     <CompilerVisibleProperty Include="XamlSourceGenEnabled" />
     <CompilerVisibleProperty Include="RootNamespace" />
     <CompilerVisibleProperty Include="AvaloniaSourceGenGlobalXmlnsPrefixes" />
+    <CompilerVisibleProperty Include="WpfXsgTargetLanguage" />
   </ItemGroup>
 
   <!--
@@ -49,10 +62,20 @@
     only once.  BeforeTargets runs the target before whichever listed target executes
     first; MSBuild skips subsequent attempts after the first run.
   -->
-  <Target Name="_WxsgPrepareXaml"
+  <Target Name="_WxsgPrepareXamlCSharp"
           BeforeTargets="MarkupCompilePass1;GenerateMSBuildEditorConfigFileShouldRun"
-          Condition="'$(WpfXsgEnabled)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
     <ItemGroup>
+      <AdditionalFiles Include="@(Page)">
+        <SourceItemGroup>Page</SourceItemGroup>
+        <TargetPath>%(Page.RecursiveDir)%(Page.Filename)%(Page.Extension)</TargetPath>
+      </AdditionalFiles>
+
+      <AdditionalFiles Include="@(ApplicationDefinition)">
+        <SourceItemGroup>ApplicationDefinition</SourceItemGroup>
+        <TargetPath>%(ApplicationDefinition.RecursiveDir)%(ApplicationDefinition.Filename)%(ApplicationDefinition.Extension)</TargetPath>
+      </AdditionalFiles>
+
       <!--
         Promote Page and ApplicationDefinition items to None so BAML compilation
         (MarkupCompilePass1/MarkupCompilePass2) has no inputs and is effectively skipped.
@@ -71,28 +94,41 @@
         Without this, classless dictionaries (for example Themes/*.xaml) disappear from
         ILSpy.g.resources when Page/ApplicationDefinition are removed.
       -->
-      <Resource Include="@(None)"
-                KeepDuplicates="false"
-                Condition="'%(None.Extension)' == '.xaml' and '%(None.Filename)%(None.Extension)' != 'App.xaml'" />
+      <Resource Include="@(Page)"
+                KeepDuplicates="false" />
+    </ItemGroup>
+  </Target>
 
-      <!--
-        Feed XAML files to the WXSG source generator via AdditionalFiles.
-        SourceItemGroup=Page / ApplicationDefinition tells WpfFrameworkBuildContract
-        which role each file plays (window/control vs. app entry point).
-        TargetPath is used to compute the pack URI (used in Phase 1 BAML mode;
-        kept for forward-compatibility).
-      -->
-      <AdditionalFiles Include="@(None)"
-                       Condition="'%(None.Extension)' == '.xaml' and '%(None.Filename)%(None.Extension)' != 'App.xaml'">
+  <Target Name="_WxsgPrepareXamlVisualBasic"
+          BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgVisualBasicMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+    <ItemGroup>
+      <AdditionalFiles Include="@(Page)">
         <SourceItemGroup>Page</SourceItemGroup>
-        <TargetPath>%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+        <TargetPath>%(Page.RecursiveDir)%(Page.Filename)%(Page.Extension)</TargetPath>
       </AdditionalFiles>
 
-      <AdditionalFiles Include="@(None)"
-                       Condition="'%(None.Extension)' == '.xaml' and '%(None.Filename)%(None.Extension)' == 'App.xaml'">
+      <AdditionalFiles Include="@(ApplicationDefinition)">
         <SourceItemGroup>ApplicationDefinition</SourceItemGroup>
-        <TargetPath>%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+        <TargetPath>%(ApplicationDefinition.RecursiveDir)%(ApplicationDefinition.Filename)%(ApplicationDefinition.Extension)</TargetPath>
       </AdditionalFiles>
     </ItemGroup>
+  </Target>
+
+  <Target Name="_WxsgSuppressMarkupGeneratedVisualBasicCompile"
+          AfterTargets="MarkupCompilePass1"
+          BeforeTargets="CoreCompile"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgVisualBasicMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+    <ItemGroup>
+      <Compile Remove="@(Compile)"
+               Condition="'%(Compile.AutoGen)' == 'True' and ($([System.String]::Copy('%(Compile.Identity)').EndsWith('.g.vb')) or $([System.String]::Copy('%(Compile.Identity)').EndsWith('.g.i.vb')))" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_WxsgWarnUnsupportedLanguage"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' != 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+    <Message Importance="High"
+             Text="WXSG target language '$(WpfXsgTargetLanguage)' is not currently supported for project language '$(Language)'. The build will fall back to the default WPF markup compiler." />
   </Target>
 </Project>
