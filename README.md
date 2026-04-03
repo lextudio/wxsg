@@ -1,7 +1,11 @@
-# XAML Source Generator for WPF (WXSG)
+# XAML Source Generator for WPF (WXSG) Toolset
+
+[![Become a Sponsor](https://img.shields.io/badge/Become%20a%20Sponsor-lextudio-orange.svg?style=for-readme)](https://github.com/sponsors/lextudio)
 
 WXSG replaces WPF's classic XAML/BAML codegen path with Roslyn source generation and emits
 typed `InitializeComponent()` code directly in C#.
+
+**This toolset is independent and unaffiliated with Microsoft.**
 
 This repo's reference usage is:
 `vscode-wpf/sample/net6.0-csharp-expressions`.
@@ -87,3 +91,11 @@ From the sample:
   (for example view models in `Window.Resources`), unless you declare an equivalent global prefix.
 - Simpler XAML here means you can omit repeated standard header declarations in WXSG input while
   still keeping normal WPF semantics.
+
+## License
+
+MIT
+
+## Copyright
+
+2026 (c) LeXtudio Inc. All rights reserved.
