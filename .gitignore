@@ -17,3 +17,4 @@ coverage/
 tools/
 test/**/*.js
 test/**/*.js.map
+nuget.exe
