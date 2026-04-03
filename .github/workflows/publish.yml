@@ -35,4 +35,4 @@ jobs:
         run: dotnet pack --configuration Release --no-restore src\XamlToCSharpGenerator.Generator.WPF\XamlToCSharpGenerator.Generator.WPF.csproj -o out
 
       - name: Push to GitHub Packages
-        run: dotnet nuget push out/*.nupkg --api-key ${{ secrets.GITHUB_TOKEN }} --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+        run: Get-ChildItem "out/*.nupkg" | ForEach-Object { dotnet nuget push $_.FullName --api-key ${{ secrets.GITHUB_TOKEN }} --source "https://github.com{{ github.repository_owner }}/index.json" --skip-duplicate }
