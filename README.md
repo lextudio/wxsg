@@ -16,16 +16,13 @@ This repo's reference usage is:
 ## Quick Start (Project Consumption)
 
 Published package page:
-`https://github.com/lextudio/wxsg/pkgs/nuget/XamlToCSharpGenerator.Generator.WPF`
-
-GitHub Packages source endpoint:
-`https://nuget.pkg.github.com/lextudio/index.json`
+`https://www.nuget.org/packages/XamlToCSharpGenerator.Generator.WPF`
 
 1. Add WXSG package reference:
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="XamlToCSharpGenerator.Generator.WPF" Version="1.0.0" PrivateAssets="all" />
+  <PackageReference Include="XamlToCSharpGenerator.Generator.WPF" Version="0.1.0" PrivateAssets="all" />
 </ItemGroup>
 ```
 

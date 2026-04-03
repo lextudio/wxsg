@@ -47,6 +47,11 @@
           PackagePath="buildTransitive\XamlToCSharpGenerator.Generator.WPF.targets" />
   </ItemGroup>
 
+  <!-- Include README from wxsg root -->
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+
   <!-- Bundle all required assemblies into the NuGet analyzer path -->
   <ItemGroup>
     <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
