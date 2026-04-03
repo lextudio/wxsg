@@ -49,7 +49,7 @@
 
   <!-- Include README from wxsg root -->
   <ItemGroup>
-    <None Include="..\..\README.md" Pack="true" PackagePath="README.md" />
+    <None Include="$(MSBuildThisFileDirectory)..\..\README.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 
   <!-- Bundle all required assemblies into the NuGet analyzer path -->
