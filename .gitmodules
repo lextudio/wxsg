@@ -1,0 +1,3 @@
+[submodule "external/XamlToCSharpGenerator"]
+	path = external/XamlToCSharpGenerator
+	url = https://github.com/lextudio/XamlToCSharpGenerator.git

@@ -1,0 +1,88 @@
+<Project>
+  <!--
+    Mirror WpfXsgEnabled into XamlSourceGenEnabled here (in .targets, not .props) so that
+    the project's <WpfXsgEnabled>true</WpfXsgEnabled> is already evaluated before this
+    condition is checked.  Properties in .props are evaluated before project content;
+    properties in .targets are evaluated after.
+  -->
+  <PropertyGroup>
+    <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == '' and '$(WpfXsgEnabled)' == 'true'">true</XamlSourceGenEnabled>
+    <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == ''">false</XamlSourceGenEnabled>
+
+    <!--
+      Auto-configure the `local` xmlns prefix from RootNamespace so XAML files do not
+      need an explicit xmlns:local="clr-namespace:..." declaration (MAUI-style simpler XAML).
+      Placed in .targets (not .props) so RootNamespace is already set from project content.
+    -->
+    <AvaloniaSourceGenGlobalXmlnsPrefixes
+      Condition="'$(AvaloniaSourceGenGlobalXmlnsPrefixes)' == '' and '$(RootNamespace)' != '' and '$(WpfXsgEnabled)' == 'true'"
+      >local=clr-namespace:$(RootNamespace)</AvaloniaSourceGenGlobalXmlnsPrefixes>
+  </PropertyGroup>
+
+  <!--
+    Make MSBuild properties and per-file item metadata visible to Roslyn source generators
+    via the generated .editorconfig file. These are in .targets (not .props) so WpfXsgEnabled
+    is already evaluated from the project file before this condition is checked.
+  -->
+  <ItemGroup Condition="'$(WpfXsgEnabled)' == 'true'">
+    <!-- Per-file metadata: generator reads SourceItemGroup (Page/ApplicationDefinition)
+         and TargetPath (for pack URI computation) from each AdditionalFiles entry. -->
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="SourceItemGroup" />
+    <CompilerVisibleItemMetadata Include="AdditionalFiles" MetadataName="TargetPath" />
+
+    <!-- Global properties the generator reads at file-independent level. -->
+    <CompilerVisibleProperty Include="XamlSourceGenEnabled" />
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="AvaloniaSourceGenGlobalXmlnsPrefixes" />
+  </ItemGroup>
+
+  <!--
+    WXSG (WPF XAML Source Generator) — MSBuild targets.
+
+    This file handles two responsibilities:
+      1. Move XAML files from the WPF-native Page/ApplicationDefinition build actions
+         to None, bypassing BAML compilation (MarkupCompilePass1/2) entirely.
+      2. Inject those files into AdditionalFiles (with SourceItemGroup/TargetPath metadata)
+         BEFORE the Roslyn editorconfig snapshot is taken, so the generator sees them.
+
+    Both actions are combined in a single target to guarantee they run atomically and
+    only once.  BeforeTargets runs the target before whichever listed target executes
+    first; MSBuild skips subsequent attempts after the first run.
+  -->
+  <Target Name="_WxsgPrepareXaml"
+          BeforeTargets="MarkupCompilePass1;GenerateMSBuildEditorConfigFileShouldRun"
+          Condition="'$(WpfXsgEnabled)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+    <ItemGroup>
+      <!--
+        Promote Page and ApplicationDefinition items to None so BAML compilation
+        (MarkupCompilePass1/MarkupCompilePass2) has no inputs and is effectively skipped.
+        Keeping UseWPF=true means WPF framework references are still resolved; only the
+        XAML-to-BAML codegen step is bypassed.
+      -->
+      <None Include="@(Page)" />
+      <Page Remove="@(Page)" />
+
+      <None Include="@(ApplicationDefinition)" />
+      <ApplicationDefinition Remove="@(ApplicationDefinition)" />
+
+      <!--
+        Feed XAML files to the WXSG source generator via AdditionalFiles.
+        SourceItemGroup=Page / ApplicationDefinition tells WpfFrameworkBuildContract
+        which role each file plays (window/control vs. app entry point).
+        TargetPath is used to compute the pack URI (used in Phase 1 BAML mode;
+        kept for forward-compatibility).
+      -->
+      <AdditionalFiles Include="@(None)"
+                       Condition="'%(None.Extension)' == '.xaml' and '%(None.Filename)%(None.Extension)' != 'App.xaml'">
+        <SourceItemGroup>Page</SourceItemGroup>
+        <TargetPath>%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      </AdditionalFiles>
+
+      <AdditionalFiles Include="@(None)"
+                       Condition="'%(None.Extension)' == '.xaml' and '%(None.Filename)%(None.Extension)' == 'App.xaml'">
+        <SourceItemGroup>ApplicationDefinition</SourceItemGroup>
+        <TargetPath>%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
+      </AdditionalFiles>
+    </ItemGroup>
+  </Target>
+</Project>

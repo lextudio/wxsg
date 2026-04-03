@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>XamlToCSharpGenerator.Build.WPF</PackageId>
+    <Description>MSBuild props/targets that wire WXSG (WPF XAML Source Generator) into WPF projects.</Description>
+  </PropertyGroup>
+
+  <!--
+    Include the buildTransitive props/targets in the NuGet package layout.
+    When this package is referenced by a project (directly or transitively),
+    MSBuild will automatically import these files.
+  -->
+  <ItemGroup>
+    <None Include="buildTransitive\**\*"
+          Pack="true"
+          PackagePath="buildTransitive\" />
+  </ItemGroup>
+</Project>

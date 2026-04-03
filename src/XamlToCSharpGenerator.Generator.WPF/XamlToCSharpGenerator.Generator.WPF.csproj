@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>XamlToCSharpGenerator.Generator.WPF</RootNamespace>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <IsPackable>true</IsPackable>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <PackageId>XamlToCSharpGenerator.Generator.WPF</PackageId>
+    <Description>WPF XAML source generator (WXSG) — generates typed InitializeComponent from WPF Page items.</Description>
+    <PackageTags>wpf;analyzer;generator;roslyn;xaml</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\XamlToCSharpGenerator.WPF\XamlToCSharpGenerator.WPF.csproj" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Compiler\XamlToCSharpGenerator.Compiler.csproj" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Core\XamlToCSharpGenerator.Core.csproj" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.ExpressionSemantics\XamlToCSharpGenerator.ExpressionSemantics.csproj" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Framework.Abstractions\XamlToCSharpGenerator.Framework.Abstractions.csproj" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.MiniLanguageParsing\XamlToCSharpGenerator.MiniLanguageParsing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Bundle the Build.WPF props/targets into the package's buildTransitive folder.
+    This means consumers only need a single PackageReference — no separate Build.WPF reference.
+  -->
+  <!--
+    Bundle Build.WPF props/targets under the package ID name so NuGet auto-imports them.
+    NuGet only auto-imports buildTransitive/{PackageId}.props and .targets.
+  -->
+  <ItemGroup>
+    <None Include="..\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
+          Pack="true"
+          PackagePath="buildTransitive\XamlToCSharpGenerator.Generator.WPF.props" />
+    <None Include="..\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets"
+          Pack="true"
+          PackagePath="buildTransitive\XamlToCSharpGenerator.Generator.WPF.targets" />
+  </ItemGroup>
+
+  <!-- Bundle all required assemblies into the NuGet analyzer path -->
+  <ItemGroup>
+    <None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.WPF.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.Compiler.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.Core.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.ExpressionSemantics.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.Framework.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    <None Include="$(OutputPath)XamlToCSharpGenerator.MiniLanguageParsing.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,14 @@
+<Project>
+  <!--
+    WXSG (WPF XAML Source Generator) — MSBuild property defaults.
+
+    Imported before project properties are evaluated (via buildTransitive).
+    All properties use Condition="'$(...)' == ''" so the project can override them.
+  -->
+  <PropertyGroup>
+    <!-- Master opt-in switch. Set to true in your project to activate WXSG. -->
+    <WpfXsgEnabled Condition="'$(WpfXsgEnabled)' == ''">false</WpfXsgEnabled>
+
+  </PropertyGroup>
+
+</Project>
