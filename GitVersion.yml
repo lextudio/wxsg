@@ -1,0 +1,2 @@
+mode: ContinuousDelivery
+tag-prefix: '[vV]'

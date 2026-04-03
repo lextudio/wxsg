@@ -11,6 +11,7 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
     <PackageId>XamlToCSharpGenerator.Generator.WPF</PackageId>
+    <Version Condition="'$(Version)' == '' and '$(GitVersion_NuGetVersionV2)' != ''">$(GitVersion_NuGetVersionV2)</Version>
     <Description>WPF XAML source generator (WXSG) — generates typed InitializeComponent from WPF Page items.</Description>
     <PackageTags>wpf;analyzer;generator;roslyn;xaml</PackageTags>
   </PropertyGroup>
@@ -25,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="GitVersion.MsBuild" Version="6.0.5" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.10.0" PrivateAssets="all" />
   </ItemGroup>
 
