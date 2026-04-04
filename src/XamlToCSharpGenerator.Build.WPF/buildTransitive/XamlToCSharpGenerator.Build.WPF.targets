@@ -10,15 +10,18 @@
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'CSharp'">CSharp</WpfXsgTargetLanguageNormalized>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'VB'">VisualBasic</WpfXsgTargetLanguageNormalized>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'VisualBasic'">VisualBasic</WpfXsgTargetLanguageNormalized>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'F#'">FSharp</WpfXsgTargetLanguageNormalized>
+    <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'FSharp'">FSharp</WpfXsgTargetLanguageNormalized>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguageNormalized)' == ''">CSharp</WpfXsgTargetLanguageNormalized>
 
     <WpfXsgCSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'CSharp' and '$(Language)' == 'C#'">true</WpfXsgCSharpMode>
     <WpfXsgVisualBasicMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'VisualBasic' and '$(Language)' == 'VB'">true</WpfXsgVisualBasicMode>
+    <WpfXsgFSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'FSharp' and '$(Language)' == 'F#'">true</WpfXsgFSharpMode>
 
-    <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == '' and ('$(WpfXsgCSharpMode)' == 'true' or '$(WpfXsgVisualBasicMode)' == 'true')">true</WpfXsgLanguageSupported>
+    <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == '' and ('$(WpfXsgCSharpMode)' == 'true' or '$(WpfXsgVisualBasicMode)' == 'true' or '$(WpfXsgFSharpMode)' == 'true')">true</WpfXsgLanguageSupported>
     <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == ''">false</WpfXsgLanguageSupported>
 
-    <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == '' and '$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' == 'true'">true</XamlSourceGenEnabled>
+    <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == '' and '$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' == 'true' and '$(WpfXsgFSharpMode)' != 'true'">true</XamlSourceGenEnabled>
     <XamlSourceGenEnabled Condition="'$(XamlSourceGenEnabled)' == ''">false</XamlSourceGenEnabled>
 
     <!--
@@ -129,6 +132,305 @@
     </ItemGroup>
   </Target>
 
+  <UsingTask TaskName="WxsgGenerateFSharpCode"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <XamlFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+      <GeneratedFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Xml.Linq" />
+      <Using Namespace="Microsoft.Build.Framework" />
+      <Using Namespace="Microsoft.Build.Utilities" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        // Mapping of common XAML element local names to fully-qualified WPF types.
+        var wpfTypeMap = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+          // System.Windows
+          { "Window",            "System.Windows.Window" },
+          { "UserControl",       "System.Windows.Controls.UserControl" },
+          { "Page",              "System.Windows.Controls.Page" },
+          // Layout
+          { "Grid",              "System.Windows.Controls.Grid" },
+          { "StackPanel",        "System.Windows.Controls.StackPanel" },
+          { "DockPanel",         "System.Windows.Controls.DockPanel" },
+          { "WrapPanel",         "System.Windows.Controls.WrapPanel" },
+          { "Canvas",            "System.Windows.Controls.Canvas" },
+          { "UniformGrid",       "System.Windows.Controls.Primitives.UniformGrid" },
+          { "ScrollViewer",      "System.Windows.Controls.ScrollViewer" },
+          { "Border",            "System.Windows.Controls.Border" },
+          { "Viewbox",           "System.Windows.Controls.Viewbox" },
+          { "GroupBox",          "System.Windows.Controls.GroupBox" },
+          { "Expander",          "System.Windows.Controls.Expander" },
+          { "TabControl",        "System.Windows.Controls.TabControl" },
+          { "TabItem",           "System.Windows.Controls.TabItem" },
+          { "GridSplitter",      "System.Windows.Controls.GridSplitter" },
+          // Content controls
+          { "Button",            "System.Windows.Controls.Button" },
+          { "ToggleButton",      "System.Windows.Controls.Primitives.ToggleButton" },
+          { "CheckBox",          "System.Windows.Controls.CheckBox" },
+          { "RadioButton",       "System.Windows.Controls.RadioButton" },
+          { "Label",             "System.Windows.Controls.Label" },
+          { "TextBlock",         "System.Windows.Controls.TextBlock" },
+          { "TextBox",           "System.Windows.Controls.TextBox" },
+          { "PasswordBox",       "System.Windows.Controls.PasswordBox" },
+          { "RichTextBox",       "System.Windows.Controls.RichTextBox" },
+          { "ComboBox",          "System.Windows.Controls.ComboBox" },
+          { "ComboBoxItem",      "System.Windows.Controls.ComboBoxItem" },
+          { "ListBox",           "System.Windows.Controls.ListBox" },
+          { "ListBoxItem",       "System.Windows.Controls.ListBoxItem" },
+          { "ListView",          "System.Windows.Controls.ListView" },
+          { "TreeView",          "System.Windows.Controls.TreeView" },
+          { "TreeViewItem",      "System.Windows.Controls.TreeViewItem" },
+          { "DataGrid",          "System.Windows.Controls.DataGrid" },
+          { "DataGridColumn",    "System.Windows.Controls.DataGridColumn" },
+          { "Slider",            "System.Windows.Controls.Slider" },
+          { "ProgressBar",       "System.Windows.Controls.ProgressBar" },
+          { "ScrollBar",         "System.Windows.Controls.Primitives.ScrollBar" },
+          { "Image",             "System.Windows.Controls.Image" },
+          { "MediaElement",      "System.Windows.Controls.MediaElement" },
+          { "WebBrowser",        "System.Windows.Controls.WebBrowser" },
+          { "Frame",             "System.Windows.Controls.Frame" },
+          // Menus / toolbars
+          { "Menu",              "System.Windows.Controls.Menu" },
+          { "MenuItem",          "System.Windows.Controls.MenuItem" },
+          { "ContextMenu",       "System.Windows.Controls.ContextMenu" },
+          { "ToolBar",           "System.Windows.Controls.ToolBar" },
+          { "ToolBarTray",       "System.Windows.Controls.ToolBarTray" },
+          { "StatusBar",         "System.Windows.Controls.Primitives.StatusBar" },
+          { "StatusBarItem",     "System.Windows.Controls.Primitives.StatusBarItem" },
+          { "Separator",         "System.Windows.Controls.Separator" },
+          // Shapes
+          { "Rectangle",         "System.Windows.Shapes.Rectangle" },
+          { "Ellipse",           "System.Windows.Shapes.Ellipse" },
+          { "Line",              "System.Windows.Shapes.Line" },
+          { "Path",              "System.Windows.Shapes.Path" },
+          { "Polygon",           "System.Windows.Shapes.Polygon" },
+          { "Polyline",          "System.Windows.Shapes.Polyline" },
+        };
+
+        var generated = new List<ITaskItem>();
+        Directory.CreateDirectory(OutputDirectory);
+
+        XNamespace xamlNs = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        foreach (var xamlFile in XamlFiles ?? Array.Empty<ITaskItem>())
+        {
+          var filePath = xamlFile.GetMetadata("FullPath");
+          if (string.IsNullOrWhiteSpace(filePath))
+          {
+            filePath = xamlFile.ItemSpec;
+          }
+
+          if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+          {
+            continue;
+          }
+
+          var targetPath = xamlFile.GetMetadata("TargetPath");
+          if (string.IsNullOrWhiteSpace(targetPath))
+          {
+            targetPath = Path.GetFileName(filePath);
+          }
+          targetPath = targetPath.Replace('\\', '/');
+
+          XDocument xdoc;
+          try
+          {
+            xdoc = XDocument.Load(filePath, LoadOptions.SetLineInfo);
+          }
+          catch
+          {
+            continue;
+          }
+
+          var root = xdoc.Root;
+          if (root == null)
+          {
+            continue;
+          }
+
+          var classAttr = root.Attribute(xamlNs + "Class");
+          var classFullName = classAttr?.Value?.Trim();
+          if (string.IsNullOrWhiteSpace(classFullName))
+          {
+            continue;
+          }
+
+          var lastDot = classFullName.LastIndexOf('.');
+          if (lastDot <= 0 || lastDot >= classFullName.Length - 1)
+          {
+            continue;
+          }
+
+          var classNamespace = classFullName.Substring(0, lastDot);
+          var className = classFullName.Substring(lastDot + 1);
+          var escapedTargetPath = targetPath.Replace("\"", "\"\"");
+          var rootLocalName = root.Name.LocalName;
+          var baseTypeName = "System.Windows.FrameworkElement";
+          if (string.Equals(rootLocalName, "Window", StringComparison.Ordinal))
+          {
+            baseTypeName = "System.Windows.Window";
+          }
+          else if (string.Equals(rootLocalName, "Application", StringComparison.Ordinal))
+          {
+            baseTypeName = "System.Windows.Application";
+          }
+
+          // Collect all elements with x:Name (skip the root itself).
+          var namedElements = new List<KeyValuePair<string, string>>(); // (fieldName, wpfType)
+          foreach (var el in root.Descendants())
+          {
+            var nameAttr = el.Attribute(xamlNs + "Name");
+            var fieldName = nameAttr?.Value?.Trim();
+            if (string.IsNullOrWhiteSpace(fieldName))
+            {
+              continue;
+            }
+
+            string wpfType;
+            if (!wpfTypeMap.TryGetValue(el.Name.LocalName, out wpfType))
+            {
+              wpfType = "System.Windows.FrameworkElement";
+            }
+
+            namedElements.Add(new KeyValuePair<string, string>(fieldName, wpfType));
+          }
+
+          var outputFile = Path.Combine(
+            OutputDirectory,
+            classFullName.Replace('.', '_').Replace('+', '_') + ".wxsg.g.fs");
+
+          var sb = new StringBuilder(1024);
+          sb.AppendLine("// <auto-generated/>");
+          sb.AppendLine("namespace " + classNamespace);
+          sb.AppendLine();
+          sb.AppendLine("open System");
+          sb.AppendLine("open System.IO");
+          sb.AppendLine("open System.Windows");
+          sb.AppendLine("open System.Windows.Markup");
+          sb.AppendLine();
+          sb.AppendLine("type " + className + "() as this =");
+          sb.AppendLine("    inherit " + baseTypeName + "()");
+          sb.AppendLine("    let mutable _contentLoaded = false");
+
+          // Emit a let mutable field for each named element.
+          // Use __ prefix on the private binding to avoid the FS0905 clash with the
+          // same-named public member property emitted below.
+          foreach (var named in namedElements)
+          {
+            sb.AppendLine("    let mutable __" + named.Key + " : " + named.Value + " = Unchecked.defaultof<_>");
+          }
+
+          sb.AppendLine("    do this.InitializeComponent()");
+          sb.AppendLine();
+          sb.AppendLine("    member this.InitializeComponent() =");
+          sb.AppendLine("        if _contentLoaded then");
+          sb.AppendLine("            ()");
+          sb.AppendLine("        else");
+          sb.AppendLine("            _contentLoaded <- true");
+          sb.AppendLine("            let __xamlPath = Path.Combine(AppContext.BaseDirectory, \"" + escapedTargetPath + "\")");
+          sb.AppendLine("            if File.Exists(__xamlPath) then");
+          sb.AppendLine("                use __stream = File.OpenRead(__xamlPath)");
+          if (string.Equals(baseTypeName, "System.Windows.Window", StringComparison.Ordinal))
+          {
+            sb.AppendLine("                let __loaded = XamlReader.Load(__stream) :?> Window");
+            // Wire up named elements before moving content (NameScope lives on __loaded).
+            foreach (var named in namedElements)
+            {
+              sb.AppendLine("                __" + named.Key + " <- __loaded.FindName(\"" + named.Key + "\") :?> " + named.Value);
+            }
+            sb.AppendLine("                this.Content <- __loaded.Content");
+            sb.AppendLine("                this.Title <- __loaded.Title");
+            sb.AppendLine("                this.Width <- __loaded.Width");
+            sb.AppendLine("                this.Height <- __loaded.Height");
+            sb.AppendLine("                this.Resources <- __loaded.Resources");
+          }
+          else if (string.Equals(baseTypeName, "System.Windows.Application", StringComparison.Ordinal))
+          {
+            sb.AppendLine("                let __loaded = XamlReader.Load(__stream) :?> Application");
+            sb.AppendLine("                this.Resources <- __loaded.Resources");
+            sb.AppendLine("                if not (isNull __loaded.StartupUri) then");
+            sb.AppendLine("                    this.StartupUri <- __loaded.StartupUri");
+          }
+          else
+          {
+            sb.AppendLine("                let __loaded = XamlReader.Load(__stream) :?> System.Windows.FrameworkElement");
+            // Wire up named elements.
+            foreach (var named in namedElements)
+            {
+              sb.AppendLine("                __" + named.Key + " <- __loaded.FindName(\"" + named.Key + "\") :?> " + named.Value);
+            }
+            sb.AppendLine("                ignore __loaded");
+          }
+          sb.AppendLine("            else");
+          sb.AppendLine("                ()");
+
+          // Expose named elements as read-only members accessible from outside the class.
+          foreach (var named in namedElements)
+          {
+            sb.AppendLine("    member _.``" + named.Key + "`` = __" + named.Key);
+          }
+
+          File.WriteAllText(outputFile, sb.ToString(), Encoding.UTF8);
+          var generatedItem = new TaskItem(outputFile);
+          generatedItem.SetMetadata("AutoGen", "True");
+          generatedItem.SetMetadata("DesignTime", "True");
+          generatedItem.SetMetadata("Visible", "False");
+          generated.Add(generatedItem);
+        }
+
+        GeneratedFiles = generated.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="_WxsgPrepareXamlFSharp"
+          BeforeTargets="MarkupCompilePass1;CoreCompile"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgFSharpMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+    <ItemGroup>
+      <_WxsgFSharpXaml Include="@(Page)">
+        <TargetPath>%(Page.RecursiveDir)%(Page.Filename)%(Page.Extension)</TargetPath>
+      </_WxsgFSharpXaml>
+
+      <_WxsgFSharpXaml Include="@(ApplicationDefinition)">
+        <TargetPath>%(ApplicationDefinition.RecursiveDir)%(ApplicationDefinition.Filename)%(ApplicationDefinition.Extension)</TargetPath>
+      </_WxsgFSharpXaml>
+
+      <None Include="@(_WxsgFSharpXaml)" />
+      <Page Remove="@(Page)" />
+      <ApplicationDefinition Remove="@(ApplicationDefinition)" />
+
+      <Content Include="@(_WxsgFSharpXaml)" KeepDuplicates="false">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <TargetPath>%(_WxsgFSharpXaml.TargetPath)</TargetPath>
+      </Content>
+    </ItemGroup>
+
+    <MakeDir Directories="$(IntermediateOutputPath)wxsg\fsharp" />
+
+    <WxsgGenerateFSharpCode XamlFiles="@(_WxsgFSharpXaml)"
+                            OutputDirectory="$(IntermediateOutputPath)wxsg\fsharp">
+      <Output TaskParameter="GeneratedFiles" ItemName="_WxsgGeneratedFSharpCompile" />
+    </WxsgGenerateFSharpCode>
+
+    <ItemGroup>
+      <_WxsgUserCompile Include="@(Compile)" Exclude="@(_WxsgGeneratedFSharpCompile)" />
+      <Compile Remove="@(Compile)" />
+      <Compile Include="@(_WxsgGeneratedFSharpCompile)"
+               AutoGen="True"
+               DesignTime="True"
+               Visible="False" />
+      <Compile Include="@(_WxsgUserCompile)" />
+    </ItemGroup>
+  </Target>
+
   <Target Name="_WxsgSuppressMarkupGeneratedVisualBasicCompile"
           AfterTargets="MarkupCompilePass1"
           BeforeTargets="CoreCompile"
@@ -144,5 +446,12 @@
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgLanguageSupported)' != 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
     <Message Importance="High"
              Text="WXSG target language '$(WpfXsgTargetLanguage)' is not currently supported for project language '$(Language)'. The build will fall back to the default WPF markup compiler." />
+  </Target>
+
+  <Target Name="_WxsgWarnFSharpGeneratorLimitation"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'F#' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+    <Message Importance="High"
+             Text="WXSG F# mode uses an MSBuild prototype path (generated .g.fs + loose XAML copy). Roslyn source generators are unavailable in F# compilation." />
   </Target>
 </Project>
