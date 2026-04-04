@@ -315,6 +315,7 @@
           sb.AppendLine("open System.IO");
           sb.AppendLine("open System.Windows");
           sb.AppendLine("open System.Windows.Markup");
+          sb.AppendLine("open System.Xml.Linq");
           sb.AppendLine();
           sb.AppendLine("type " + className + "() as this =");
           sb.AppendLine("    inherit " + baseTypeName + "()");
@@ -337,9 +338,9 @@
           sb.AppendLine("            _contentLoaded <- true");
           sb.AppendLine("            let __xamlPath = Path.Combine(AppContext.BaseDirectory, \"" + escapedTargetPath + "\")");
           sb.AppendLine("            if File.Exists(__xamlPath) then");
-          sb.AppendLine("                use __stream = File.OpenRead(__xamlPath)");
           if (string.Equals(baseTypeName, "System.Windows.Window", StringComparison.Ordinal))
           {
+            sb.AppendLine("                use __stream = File.OpenRead(__xamlPath)");
             sb.AppendLine("                let __loaded = XamlReader.Load(__stream) :?> Window");
             // Wire up named elements before moving content (NameScope lives on __loaded).
             foreach (var named in namedElements)
@@ -354,13 +355,26 @@
           }
           else if (string.Equals(baseTypeName, "System.Windows.Application", StringComparison.Ordinal))
           {
-            sb.AppendLine("                let __loaded = XamlReader.Load(__stream) :?> Application");
-            sb.AppendLine("                this.Resources <- __loaded.Resources");
-            sb.AppendLine("                if not (isNull __loaded.StartupUri) then");
-            sb.AppendLine("                    this.StartupUri <- __loaded.StartupUri");
+            // XamlReader.Load(Application.xaml) would create a second Application
+            // instance, which WPF forbids (singleton).  Parse the XAML as plain XML
+            // instead and extract the properties we need directly.
+            sb.AppendLine("                let __xdoc = XDocument.Load(__xamlPath)");
+            sb.AppendLine("                let __wpfNs = XNamespace.Get(\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\")");
+            sb.AppendLine("                // StartupUri attribute on the root element");
+            sb.AppendLine("                let __startupUriAttr = __xdoc.Root.Attribute(\"StartupUri\")");
+            sb.AppendLine("                if not (isNull __startupUriAttr) && not (System.String.IsNullOrWhiteSpace(__startupUriAttr.Value)) then");
+            sb.AppendLine("                    this.StartupUri <- System.Uri(__startupUriAttr.Value, System.UriKind.Relative)");
+            sb.AppendLine("                // Application.Resources child element");
+            sb.AppendLine("                let __resEl = __xdoc.Root.Element(__wpfNs + \"Application.Resources\")");
+            sb.AppendLine("                if not (isNull __resEl) then");
+            sb.AppendLine("                    for __child in __resEl.Elements() do");
+            sb.AppendLine("                        let __rdXml = __child.ToString()");
+            sb.AppendLine("                        let __rd = XamlReader.Parse(__rdXml) :?> System.Windows.ResourceDictionary");
+            sb.AppendLine("                        this.Resources.MergedDictionaries.Add(__rd)");
           }
           else
           {
+            sb.AppendLine("                use __stream = File.OpenRead(__xamlPath)");
             sb.AppendLine("                let __loaded = XamlReader.Load(__stream) :?> System.Windows.FrameworkElement");
             // Wire up named elements.
             foreach (var named in namedElements)
