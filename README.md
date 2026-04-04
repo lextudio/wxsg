@@ -3,7 +3,7 @@
 [![Become a Sponsor](https://img.shields.io/badge/Become%20a%20Sponsor-lextudio-orange.svg?style=for-readme)](https://github.com/sponsors/lextudio)
 
 WXSG replaces WPF's classic XAML/BAML codegen path with Roslyn source generation and emits
-typed `InitializeComponent()` code directly in C#.
+typed `InitializeComponent()` code directly in C# and VB.NET.
 
 **This toolset is independent and unaffiliated with Microsoft.**
 
@@ -13,7 +13,7 @@ This repo's reference usage can be found [in this sample](https://github.com/lex
 
 - WXSG takes over `InitializeComponent()` generation for WPF XAML.
 - Typed `x:Name` fields in generated partial classes.
-- C# expression support in XAML via `{cs: ...}`. This feature mirrors the MAUI preview in .NET MAUI 11.
+- C# expression support in XAML via `{cs: ...}`. This feature mirrors the MAUI preview in .NET MAUI 11. Not available in VB.NET projects.
 - Simpler XAML support (implicit standard namespaces for WXSG parsing). This feature mirrors the MAUI preview in .NET MAUI 10.
 
 ## Quick Start (Project Consumption)
@@ -36,6 +36,8 @@ WXSG is published as a NuGet package. [![NuGet Version](https://img.shields.io/n
   <WpfXsgEnabled>true</WpfXsgEnabled>
 </PropertyGroup>
 ```
+
+> VB.NET projects must add `<WpfXsgTargetLanguage>VisualBasic</WpfXsgTargetLanguage>`.
 
 That is enough for normal package usage because the package ships `buildTransitive` props/targets.
 
