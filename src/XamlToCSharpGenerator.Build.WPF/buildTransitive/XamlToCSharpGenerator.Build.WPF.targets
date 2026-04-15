@@ -5,6 +5,27 @@
     condition is checked.  Properties in .props are evaluated before project content;
     properties in .targets are evaluated after.
   -->
+  <!--
+    MSBuild's Microsoft.CSharp.Core.targets caps .NETFramework projects at C# 7.3
+    (MaxSupportedLangVersion = 7.3 for any TargetFrameworkIdentifier that is not
+    .NETCoreApp >= 3.0 or .NETStandard >= 2.1).  WXSG generates code that requires
+    nullable reference types (#nullable, C# 8) and the 'not' pattern (C# 9).
+
+    Bump LangVersion to 9.0 when:
+      • WpfXsgEnabled is true (WXSG is active)
+      • The project language is C#
+      • LangVersion is currently a version string that is older than 9.0
+        (7, 7.0, 7.1, 7.2, 7.3, 8, 8.0).
+    Special string values such as 'latest', 'default', and 'preview' are left
+    untouched because they always resolve to a version >= 9 on modern toolchains.
+    This PropertyGroup is in .targets (not .props) so it is evaluated AFTER
+    Microsoft.CSharp.Core.targets has already set LangVersion = 7.3 for
+    .NETFramework targets; our assignment here overrides that value.
+  -->
+  <PropertyGroup Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'C#'">
+    <LangVersion Condition="'$(LangVersion)' == '' or '$(LangVersion)' == '7' or '$(LangVersion)' == '7.0' or '$(LangVersion)' == '7.1' or '$(LangVersion)' == '7.2' or '$(LangVersion)' == '7.3' or '$(LangVersion)' == '8' or '$(LangVersion)' == '8.0'">9.0</LangVersion>
+  </PropertyGroup>
+
   <PropertyGroup>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'C#'">CSharp</WpfXsgTargetLanguageNormalized>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'CSharp'">CSharp</WpfXsgTargetLanguageNormalized>
