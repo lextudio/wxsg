@@ -11,6 +11,7 @@
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <NoWarn>$(NoWarn);NU5128</NoWarn>
     <PackageId>XamlToCSharpGenerator.Generator.WPF</PackageId>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <Version Condition="'$(Version)' == '' and '$(GitVersion_NuGetVersionV2)' != ''">$(GitVersion_NuGetVersionV2)</Version>
     <Description>WPF XAML source generator (WXSG) — generates typed InitializeComponent from WPF Page items.</Description>
     <PackageTags>wpf;analyzer;generator;roslyn;xaml</PackageTags>
@@ -40,6 +41,12 @@
     NuGet only auto-imports buildTransitive/{PackageId}.props and .targets.
   -->
   <ItemGroup>
+    <None Include="..\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
+          Pack="true"
+          PackagePath="build\XamlToCSharpGenerator.Generator.WPF.props" />
+    <None Include="..\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets"
+          Pack="true"
+          PackagePath="build\XamlToCSharpGenerator.Generator.WPF.targets" />
     <None Include="..\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
           Pack="true"
           PackagePath="buildTransitive\XamlToCSharpGenerator.Generator.WPF.props" />

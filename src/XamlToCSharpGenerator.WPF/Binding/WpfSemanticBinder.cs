@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using XamlToCSharpGenerator.Core.Abstractions;
 using XamlToCSharpGenerator.Core.Models;
@@ -242,13 +243,16 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                     return;
                 }
 
+                var routedEventHandlerTypeName = FindEvent(ownerType, attachedPropertyName)?.Type
+                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
                 eventSubscriptions.Add(new ResolvedEventSubscription(
                     EventName: attachedPropertyName,
                     HandlerMethodName: attachedHandlerName,
                     Kind: ResolvedEventSubscriptionKind.RoutedEvent,
                     RoutedEventOwnerTypeName: ToDisplayName(ownerType),
                     RoutedEventFieldName: routedEventField.Name,
-                    RoutedEventHandlerTypeName: null,
+                    RoutedEventHandlerTypeName: routedEventHandlerTypeName,
                     Line: assignment.Line,
                     Column: assignment.Column,
                     Condition: assignment.Condition));
@@ -901,6 +905,17 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                     }
 
                     break;
+                case XamlMarkupExtensionKind.Unknown:
+                    // For unknown markup extensions that carry a namespace prefix (e.g.
+                    // {core:Localize Key}), resolve the prefix to its XML namespace URI and
+                    // encode all the information into the ValueExpression so the emitter can
+                    // generate a runtime call to __WXSG_EvaluateUnknownMarkupExtension.
+                    if (TryBuildUnknownMarkupExtensionEncoding(markupInfo, context, out var unknownMeEncoding))
+                    {
+                        return (unknownMeEncoding, ResolvedValueKind.Literal);
+                    }
+
+                    break;
             }
 
             // For non-CSharp markup extensions, keep the source text as a literal.
@@ -1327,5 +1342,74 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         public string ClrNamespace { get; }
 
         public string? AssemblyName { get; }
+    }
+
+    /// <summary>
+    /// Encodes an unknown (custom) markup extension into a special literal string that the
+    /// emitter can later decode and lower to a <c>__WXSG_EvaluateUnknownMarkupExtension</c>
+    /// runtime call.
+    ///
+    /// Encoding format (fields separated by <c>'\x1f'</c> Unit Separator):
+    /// <list type="bullet">
+    ///   <item><c>'\x1e' + "wxsg-ume"</c> — marker (Record Separator + magic tag)</item>
+    ///   <item>Resolved XML namespace URI</item>
+    ///   <item>Local name of the extension (without prefix, without "Extension" suffix)</item>
+    ///   <item>Zero or more positional args, each prefixed with <c>"p:"</c></item>
+    ///   <item>Zero or more named args, each prefixed with <c>"n:"</c> in <c>Key=Value</c> form</item>
+    /// </list>
+    /// </summary>
+    private static bool TryBuildUnknownMarkupExtensionEncoding(
+        MarkupExtensionInfo markupInfo,
+        BindingContext context,
+        out string encoding)
+    {
+        encoding = string.Empty;
+
+        var name = markupInfo.Name;
+        var colonIndex = name.IndexOf(':');
+        if (colonIndex <= 0 || colonIndex >= name.Length - 1)
+        {
+            return false;
+        }
+
+        var prefix = name.Substring(0, colonIndex);
+        var localName = name.Substring(colonIndex + 1).Trim();
+        if (localName.Length == 0)
+        {
+            return false;
+        }
+
+        if (!context.Document.XmlNamespaces.TryGetValue(prefix, out var nsUri) ||
+            string.IsNullOrEmpty(nsUri))
+        {
+            return false;
+        }
+
+        var sb = new StringBuilder();
+        sb.Append('\x1e');       // RS: marks the start of an unknown-ME encoding
+        sb.Append("wxsg-ume");
+        sb.Append('\x1f');       // US: field separator
+        sb.Append(nsUri);
+        sb.Append('\x1f');
+        sb.Append(localName);
+
+        foreach (var arg in markupInfo.PositionalArguments)
+        {
+            sb.Append('\x1f');
+            sb.Append("p:");
+            sb.Append(arg);
+        }
+
+        foreach (var kvp in markupInfo.NamedArguments)
+        {
+            sb.Append('\x1f');
+            sb.Append("n:");
+            sb.Append(kvp.Key);
+            sb.Append('=');
+            sb.Append(kvp.Value);
+        }
+
+        encoding = AsStringLiteral(sb.ToString());
+        return true;
     }
 }

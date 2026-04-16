@@ -19,6 +19,19 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
     private const string GeneratorName = "XamlToCSharpGenerator.Generator.WPF";
     private const string WpfFrameworkId = "WPF";
     private static readonly MarkupExpressionParser MarkupParser = new();
+    private static readonly HashSet<string> CSharpKeywords = new(StringComparer.Ordinal)
+    {
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+        "checked", "class", "const", "continue", "decimal", "default", "delegate", "do",
+        "double", "else", "enum", "event", "explicit", "extern", "false", "finally",
+        "fixed", "float", "for", "foreach", "goto", "if", "implicit", "in", "int",
+        "interface", "internal", "is", "lock", "long", "namespace", "new", "null",
+        "object", "operator", "out", "override", "params", "private", "protected",
+        "public", "readonly", "ref", "return", "sbyte", "sealed", "short", "sizeof",
+        "stackalloc", "static", "string", "struct", "switch", "this", "throw", "true",
+        "try", "typeof", "uint", "ulong", "unchecked", "unsafe", "ushort", "using",
+        "virtual", "void", "volatile", "while"
+    };
 
     public (string HintName, string Source) Emit(ResolvedViewModel viewModel)
     {
@@ -70,7 +83,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         {
             sb.AppendLine(emitter.MemberIndent + "#line " + element.Line.ToString(CultureInfo.InvariantCulture));
             sb.AppendLine(emitter.MemberIndent + "[global::System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Performance\", \"CA1823:AvoidUnusedPrivateFields\")]");
-            sb.AppendLine(emitter.MemberIndent + element.FieldModifier + " " + QualifyType(element.TypeName) + " " + element.Name + ";");
+            sb.AppendLine(emitter.MemberIndent + element.FieldModifier + " " + QualifyType(element.TypeName) + " " + EscapeIdentifier(element.Name) + ";");
             sb.AppendLine(emitter.MemberIndent + "#line default");
             sb.AppendLine();
         }
@@ -164,7 +177,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             sb.AppendLine();
             foreach (var namedElement in viewModel.NamedElements)
             {
-                sb.AppendLine(i + "    this." + namedElement.Name + " = null;");
+                sb.AppendLine(i + "    this." + EscapeIdentifier(namedElement.Name) + " = null;");
             }
         }
 
@@ -197,6 +210,13 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        __clearMethod.Invoke(__value, null);");
         sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+        sb.AppendLine(i + "private static object __WXSG_EvaluateMarkupExtension(object __value)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    return __value is global::System.Windows.Markup.MarkupExtension __extension");
+        sb.AppendLine(i + "        ? __extension.ProvideValue(null)");
+        sb.AppendLine(i + "        : __value;");
         sb.AppendLine(i + "}");
     }
 
@@ -394,6 +414,49 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    return __resource;");
         sb.AppendLine(i + "}");
         sb.AppendLine();
+        sb.AppendLine(i + "private static object __WXSG_ResolveXStatic(string __token)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__token))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Empty x:Static token.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __trimmed = __token.Trim();");
+        sb.AppendLine(i + "    const string __open = \"{x:Static \";");
+        sb.AppendLine(i + "    if (!__trimmed.StartsWith(__open, global::System.StringComparison.Ordinal) || !__trimmed.EndsWith(\"}\", global::System.StringComparison.Ordinal))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Unsupported x:Static token '\" + __token + \"'.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    var __memberToken = __trimmed.Substring(__open.Length, __trimmed.Length - __open.Length - 1).Trim();");
+        sb.AppendLine(i + "    // Strip optional XML namespace prefix (e.g. \"core:GlobalStyles.WindowStyle\" -> \"GlobalStyles.WindowStyle\")");
+        sb.AppendLine(i + "    var __colonIdx = __memberToken.IndexOf(':');");
+        sb.AppendLine(i + "    if (__colonIdx >= 0 && __colonIdx < __memberToken.Length - 1)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __memberToken = __memberToken.Substring(__colonIdx + 1);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    var __memberDot = __memberToken.LastIndexOf('.');");
+        sb.AppendLine(i + "    if (__memberDot <= 0 || __memberDot >= __memberToken.Length - 1)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.InvalidOperationException(\"Invalid x:Static member token '\" + __memberToken + \"'.\");");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    var __ownerToken = __memberToken.Substring(0, __memberDot);");
+        sb.AppendLine(i + "    var __memberName = __memberToken.Substring(__memberDot + 1);");
+        sb.AppendLine(i + "    var __ownerType = __WXSG_ResolveTypeToken(__ownerToken);");
+        sb.AppendLine(i + "    var __flags = global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy;");
+        sb.AppendLine(i + "    var __prop = __ownerType.GetProperty(__memberName, __flags);");
+        sb.AppendLine(i + "    if (__prop is not null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __prop.GetValue(null);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    var __field = __ownerType.GetField(__memberName, __flags);");
+        sb.AppendLine(i + "    if (__field is not null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __field.GetValue(null);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve x:Static member '\" + __memberToken + \"'.\");");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
         sb.AppendLine(i + "private static object __WXSG_ConvertSetterValue(global::System.Windows.DependencyProperty __property, object __rawValue)");
         sb.AppendLine(i + "{");
         sb.AppendLine(i + "    if (__property is null || __rawValue is null)");
@@ -441,6 +504,86 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    catch");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        return __rawValue;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+
+        // Unknown / custom markup extension runtime resolver.
+        // Scans loaded assemblies for XmlnsDefinitionAttribute mapping the given XML namespace
+        // URI to CLR namespaces, finds the extension type (<localName>Extension or <localName>),
+        // creates an instance with the provided positional constructor argument (if any), applies
+        // named property assignments, then calls ProvideValue(null) if the type derives from
+        // MarkupExtension.  This mirrors the resolution WPF itself does for custom xmlns prefixes.
+        sb.AppendLine(i + "private static object __WXSG_EvaluateUnknownMarkupExtension(");
+        sb.AppendLine(i + "    string __xmlNsUri,");
+        sb.AppendLine(i + "    string __localName,");
+        sb.AppendLine(i + "    string[] __positionalArgs,");
+        sb.AppendLine(i + "    string[] __namedArgKeys,");
+        sb.AppendLine(i + "    string[] __namedArgValues)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    var __typeName = __localName.EndsWith(\"Extension\", global::System.StringComparison.OrdinalIgnoreCase)");
+        sb.AppendLine(i + "        ? __localName : __localName + \"Extension\";");
+        sb.AppendLine(i + "    var __assemblies = global::System.AppDomain.CurrentDomain.GetAssemblies();");
+        sb.AppendLine(i + "    foreach (var __assembly in __assemblies)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __attrs = __assembly.GetCustomAttributes(");
+        sb.AppendLine(i + "            typeof(global::System.Windows.Markup.XmlnsDefinitionAttribute), inherit: false);");
+        sb.AppendLine(i + "        foreach (global::System.Windows.Markup.XmlnsDefinitionAttribute __def in __attrs)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            if (!string.Equals(__def.XmlNamespace, __xmlNsUri, global::System.StringComparison.Ordinal))");
+        sb.AppendLine(i + "                continue;");
+        sb.AppendLine(i + "            var __clrNs = __def.ClrNamespace ?? string.Empty;");
+        sb.AppendLine(i + "            var __fullTypeName = string.IsNullOrEmpty(__clrNs)");
+        sb.AppendLine(i + "                ? __typeName");
+        sb.AppendLine(i + "                : __clrNs + \".\" + __typeName;");
+        sb.AppendLine(i + "            var __type = __assembly.GetType(__fullTypeName, throwOnError: false);");
+        sb.AppendLine(i + "            if (__type is null)");
+        sb.AppendLine(i + "                continue;");
+        sb.AppendLine(i + "            object __instance;");
+        sb.AppendLine(i + "            try");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                __instance = __positionalArgs.Length == 0");
+        sb.AppendLine(i + "                    ? global::System.Activator.CreateInstance(__type)");
+        sb.AppendLine(i + "                    : global::System.Activator.CreateInstance(__type, (object)__positionalArgs[0]);");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "            catch { continue; }");
+        sb.AppendLine(i + "            for (int __i = 0; __i < __namedArgKeys.Length; __i++)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                var __propInfo = __type.GetProperty(__namedArgKeys[__i]);");
+        sb.AppendLine(i + "                __propInfo?.SetValue(__instance, __namedArgValues[__i]);");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "            if (__instance is global::System.Windows.Markup.MarkupExtension __ext)");
+        sb.AppendLine(i + "                return __ext.ProvideValue(null);");
+        sb.AppendLine(i + "            return __instance;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    return null;");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+
+        // Helper used by the unknown-markup-extension block emitted in EmitPropertyAssignments.
+        // Locates the DependencyProperty field for the given property name on the target object's
+        // type hierarchy and calls BindingOperations.SetBinding.  A no-op when the property is
+        // not a DependencyProperty (e.g. plain CLR property on a non-DO type).
+        sb.AppendLine(i + "private static void __WXSG_TrySetBinding(");
+        sb.AppendLine(i + "    object __target,");
+        sb.AppendLine(i + "    string __propertyName,");
+        sb.AppendLine(i + "    global::System.Windows.Data.BindingBase __binding)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (!(__target is global::System.Windows.DependencyObject __depObj))");
+        sb.AppendLine(i + "        return;");
+        sb.AppendLine(i + "    var __dpFieldName = __propertyName + \"Property\";");
+        sb.AppendLine(i + "    var __flags = global::System.Reflection.BindingFlags.Public |");
+        sb.AppendLine(i + "                  global::System.Reflection.BindingFlags.Static |");
+        sb.AppendLine(i + "                  global::System.Reflection.BindingFlags.FlattenHierarchy;");
+        sb.AppendLine(i + "    for (var __t = __depObj.GetType(); __t is not null; __t = __t.BaseType)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __field = __t.GetField(__dpFieldName, __flags);");
+        sb.AppendLine(i + "        if (__field?.GetValue(null) is global::System.Windows.DependencyProperty __dp)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            global::System.Windows.Data.BindingOperations.SetBinding(__depObj, __dp, __binding);");
+        sb.AppendLine(i + "            return;");
+        sb.AppendLine(i + "        }");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "}");
     }
@@ -536,6 +679,26 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return valueExpression;
         }
 
+        // Check for a WXSG-encoded unknown markup extension written by the binder.
+        // The encoding starts with '\x1e' (Record Separator) followed by "wxsg-ume".
+        if (literalValue.Length > 0 && literalValue[0] == '\x1e' &&
+            TryParseUnknownMarkupExtensionEncoding(literalValue, out var ume))
+        {
+            var callExpr =
+                "__WXSG_EvaluateUnknownMarkupExtension(" +
+                EscapeStringLiteral(ume.NsUri) + ", " +
+                EscapeStringLiteral(ume.LocalName) + ", " +
+                BuildStringArrayExpression(ume.PositionalArgs) + ", " +
+                BuildStringArrayExpression(ume.NamedArgKeys) + ", " +
+                BuildStringArrayExpression(ume.NamedArgValues) + ")";
+
+            if (normalizedType == "string" || normalizedType == "System.String")
+                return "(string)" + callExpr;
+            if (normalizedType == "object" || normalizedType == "System.Object")
+                return callExpr;
+            return "(" + QualifyType(normalizedType) + ")" + callExpr;
+        }
+
         if (normalizedType == "string" || normalizedType == "System.String" || normalizedType == "object" || normalizedType == "System.Object")
         {
             return valueExpression;
@@ -545,6 +708,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             literalValue.EndsWith("}", StringComparison.Ordinal))
         {
             return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveStaticResource(" + valueExpression + ")";
+        }
+
+        if (literalValue.StartsWith("{x:Static ", StringComparison.Ordinal) &&
+            literalValue.EndsWith("}", StringComparison.Ordinal))
+        {
+            return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveXStatic(" + valueExpression + ")";
         }
 
         if (normalizedType == "Type" || normalizedType == "System.Type")
@@ -629,6 +798,105 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         return true;
     }
 
+    /// <summary>
+    /// Decodes the unknown-markup-extension encoding written by
+    /// <c>WpfSemanticBinder.TryBuildUnknownMarkupExtensionEncoding</c>.
+    /// </summary>
+    private static bool TryParseUnknownMarkupExtensionEncoding(
+        string literalValue,
+        out UnknownMarkupExtensionData result)
+    {
+        result = default;
+        const string marker = "\x1ewxsg-ume\x1f";
+        if (!literalValue.StartsWith(marker, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var fields = literalValue.Split('\x1f');
+        // fields[0] = "\x1ewxsg-ume", fields[1] = nsUri, fields[2] = localName, fields[3..] = args
+        if (fields.Length < 3)
+        {
+            return false;
+        }
+
+        var nsUri = fields[1];
+        var localName = fields[2];
+        var positionalArgs = new List<string>();
+        var namedArgKeys = new List<string>();
+        var namedArgValues = new List<string>();
+
+        for (var i = 3; i < fields.Length; i++)
+        {
+            var field = fields[i];
+            if (field.StartsWith("p:", StringComparison.Ordinal))
+            {
+                positionalArgs.Add(field.Substring(2));
+            }
+            else if (field.StartsWith("n:", StringComparison.Ordinal))
+            {
+                var eqIdx = field.IndexOf('=', 2);
+                if (eqIdx > 2)
+                {
+                    namedArgKeys.Add(field.Substring(2, eqIdx - 2));
+                    namedArgValues.Add(field.Substring(eqIdx + 1));
+                }
+            }
+        }
+
+        result = new UnknownMarkupExtensionData(
+            nsUri,
+            localName,
+            positionalArgs.ToArray(),
+            namedArgKeys.ToArray(),
+            namedArgValues.ToArray());
+        return true;
+    }
+
+    private static string EscapeStringLiteral(string value)
+    {
+        return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+    }
+
+    private static string BuildStringArrayExpression(string[] items)
+    {
+        if (items.Length == 0)
+        {
+            return "global::System.Array.Empty<string>()";
+        }
+
+        var parts = new string[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            parts[i] = EscapeStringLiteral(items[i]);
+        }
+
+        return "new string[] { " + string.Join(", ", parts) + " }";
+    }
+
+    private readonly struct UnknownMarkupExtensionData
+    {
+        public string NsUri { get; }
+        public string LocalName { get; }
+        public string[] PositionalArgs { get; }
+        public string[] NamedArgKeys { get; }
+        public string[] NamedArgValues { get; }
+
+        public UnknownMarkupExtensionData(
+            string nsUri,
+            string localName,
+            string[] positionalArgs,
+            string[] namedArgKeys,
+            string[] namedArgValues)
+        {
+            NsUri = nsUri;
+            LocalName = localName;
+            PositionalArgs = positionalArgs;
+            NamedArgKeys = namedArgKeys;
+            NamedArgValues = namedArgValues;
+        }
+    }
+
     private static string QualifyType(string? typeName)
     {
         if (string.IsNullOrWhiteSpace(typeName))
@@ -661,6 +929,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         return trimmed.StartsWith("global::", StringComparison.Ordinal)
             ? trimmed
             : "global::" + trimmed;
+    }
+
+    private static string EscapeIdentifier(string identifier)
+    {
+        return CSharpKeywords.Contains(identifier) ? "@" + identifier : identifier;
     }
 
     private static string? ResolveBaseTypeName(ResolvedViewModel viewModel, XamlDocumentModel doc)
@@ -738,7 +1011,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 return;
             }
 
-            Builder.AppendLine(MemberIndent + "    this." + node.Name + " = (" + QualifyType(fieldType) + ")" + instanceVariable + ";");
+            Builder.AppendLine(MemberIndent + "    this." + EscapeIdentifier(node.Name) + " = (" + QualifyType(fieldType) + ")" + instanceVariable + ";");
         }
 
         private void EmitPropertyAssignments(
@@ -758,6 +1031,46 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 if (assignment.ValueKind == ResolvedValueKind.Binding)
                 {
                     EmitSetBinding(node.TypeName, assignment, instanceVariable);
+                    continue;
+                }
+
+                // {DynamicResource key} — emit SetResourceReference for the root object (always a
+                // FrameworkElement/FrameworkContentElement), or a static TryFindResource lookup for
+                // non-root objects like GradientStop that may not have SetResourceReference.
+                if (TryUnquote(assignment.ValueExpression, out var dynResLiteral) &&
+                    dynResLiteral.StartsWith("{DynamicResource ", StringComparison.Ordinal) &&
+                    dynResLiteral.EndsWith("}", StringComparison.Ordinal))
+                {
+                    const string dynResOpen = "{DynamicResource ";
+                    var dynResKey = dynResLiteral.Substring(dynResOpen.Length, dynResLiteral.Length - dynResOpen.Length - 1).Trim();
+                    string dynResKeyExpression;
+                    if (dynResKey.StartsWith("{x:Static ", StringComparison.Ordinal) && dynResKey.EndsWith("}", StringComparison.Ordinal))
+                    {
+                        dynResKeyExpression = "__WXSG_ResolveXStatic(\"" + dynResKey.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\")";
+                    }
+                    else
+                    {
+                        dynResKeyExpression = "\"" + dynResKey.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+                    }
+
+                    if (string.Equals(instanceVariable, "this", StringComparison.Ordinal))
+                    {
+                        // Root object is always a FrameworkElement/FrameworkContentElement — use SetResourceReference.
+                        Builder.AppendLine(
+                            MemberIndent + "    " +
+                            "this.SetResourceReference(" +
+                            assignment.PropertyName + "Property, " + dynResKeyExpression + ");");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(assignment.ClrPropertyTypeName))
+                    {
+                        // Non-root object (e.g. GradientStop, Freezable) — static TryFindResource at init time.
+                        var dynResTypeName = QualifyType(assignment.ClrPropertyTypeName);
+                        Builder.AppendLine(
+                            MemberIndent + "    " +
+                            "{ var __dynResVal = global::System.Windows.Application.Current?.TryFindResource(" + dynResKeyExpression + "); " +
+                            "if (__dynResVal is " + dynResTypeName + " __dynResCast) " +
+                            instanceVariable + "." + assignment.PropertyName + " = __dynResCast; }");
+                    }
                     continue;
                 }
 
@@ -782,6 +1095,56 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                         MemberIndent + "    " +
                         instanceVariable + "." + assignment.PropertyName + " = " +
                         "__WXSG_ConvertSetterValue(" + instanceVariable + ".Property, " + convertedSetterValue + ");");
+                    continue;
+                }
+
+                // Unknown (custom) markup extension: the binder encoded the extension data
+                // using \x1e/\x1f sentinels.  Emit a block that calls
+                // __WXSG_EvaluateUnknownMarkupExtension and then either installs a Binding
+                // (if ProvideValue returned one) or assigns the scalar result directly.
+                if (TryUnquote(assignment.ValueExpression, out var umeLiteral) &&
+                    umeLiteral.Length > 0 && umeLiteral[0] == '\x1e' &&
+                    TryParseUnknownMarkupExtensionEncoding(umeLiteral, out var ume))
+                {
+                    var umeIdx = _localCounter++;
+                    var umeValVar = "__meVal_" + umeIdx.ToString(CultureInfo.InvariantCulture);
+                    var umeBindVar = "__meBinding_" + umeIdx.ToString(CultureInfo.InvariantCulture);
+                    var umeCall =
+                        "__WXSG_EvaluateUnknownMarkupExtension(" +
+                        EscapeStringLiteral(ume.NsUri) + ", " +
+                        EscapeStringLiteral(ume.LocalName) + ", " +
+                        BuildStringArrayExpression(ume.PositionalArgs) + ", " +
+                        BuildStringArrayExpression(ume.NamedArgKeys) + ", " +
+                        BuildStringArrayExpression(ume.NamedArgValues) + ")";
+                    var umeTargetType = string.IsNullOrWhiteSpace(assignment.ClrPropertyTypeName)
+                        ? "object"
+                        : assignment.ClrPropertyTypeName;
+                    var umeFrameworkOwnerForMe = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId);
+                    var umePropNameEscaped = assignment.PropertyName
+                        .Replace("\\", "\\\\")
+                        .Replace("\"", "\\\"");
+
+                    Builder.AppendLine(MemberIndent + "    {");
+                    Builder.AppendLine(MemberIndent + "        var " + umeValVar + " = " + umeCall + ";");
+                    Builder.AppendLine(MemberIndent + "        if (" + umeValVar +
+                        " is global::System.Windows.Data.BindingBase " + umeBindVar + ")");
+                    Builder.AppendLine(MemberIndent + "            __WXSG_TrySetBinding(" +
+                        instanceVariable + ", \"" + umePropNameEscaped + "\", " + umeBindVar + ");");
+                    Builder.AppendLine(MemberIndent + "        else if (" + umeValVar + " is not null)");
+                    if (!string.IsNullOrWhiteSpace(umeFrameworkOwnerForMe))
+                    {
+                        Builder.AppendLine(MemberIndent + "            " +
+                            QualifyType(umeFrameworkOwnerForMe) + ".Set" + assignment.PropertyName +
+                            "(" + instanceVariable + ", (" + QualifyType(umeTargetType) + ")" + umeValVar + ");");
+                    }
+                    else
+                    {
+                        Builder.AppendLine(MemberIndent + "            " +
+                            instanceVariable + "." + assignment.PropertyName +
+                            " = (" + QualifyType(umeTargetType) + ")" + umeValVar + ";");
+                    }
+
+                    Builder.AppendLine(MemberIndent + "    }");
                     continue;
                 }
 
@@ -849,29 +1212,34 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
         private static bool ShouldAssignBindingDirectly(string? instanceTypeName, ResolvedPropertyAssignment assignment)
         {
-            var propertyTypeName = assignment.ClrPropertyTypeName ?? string.Empty;
-            var propertyName = assignment.PropertyName ?? string.Empty;
+            return ShouldAssignBindingDirectly(instanceTypeName, assignment.ClrPropertyTypeName, assignment.PropertyName);
+        }
+
+        private static bool ShouldAssignBindingDirectly(string? instanceTypeName, string? propertyTypeName, string? propertyName)
+        {
+            var effectivePropertyTypeName = propertyTypeName ?? string.Empty;
+            var effectivePropertyName = propertyName ?? string.Empty;
             var instanceType = instanceTypeName ?? string.Empty;
 
             // Non-DependencyObject-style binding sinks: assign the Binding instance directly.
-            if (propertyTypeName.Contains("System.Windows.Data.BindingBase", StringComparison.Ordinal) ||
-                propertyTypeName.Contains("System.Windows.Data.Binding", StringComparison.Ordinal))
+            if (effectivePropertyTypeName.Contains("System.Windows.Data.BindingBase", StringComparison.Ordinal) ||
+                effectivePropertyTypeName.Contains("System.Windows.Data.Binding", StringComparison.Ordinal))
             {
                 return true;
             }
 
-            if (propertyName.Equals("Binding", StringComparison.Ordinal) &&
+            if (effectivePropertyName.Equals("Binding", StringComparison.Ordinal) &&
                 instanceType.EndsWith(".DataTrigger", StringComparison.Ordinal))
             {
                 return true;
             }
 
-            if (propertyName.Equals("DisplayMemberBinding", StringComparison.Ordinal))
+            if (effectivePropertyName.Equals("DisplayMemberBinding", StringComparison.Ordinal))
             {
                 return true;
             }
 
-            if (propertyName.Equals("Value", StringComparison.Ordinal) &&
+            if (effectivePropertyName.Equals("Value", StringComparison.Ordinal) &&
                 instanceType.EndsWith(".Setter", StringComparison.Ordinal))
             {
                 return true;
@@ -1000,9 +1368,19 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 {
                     var isDictionaryAdd = forceResourcesDictionaryAdd ||
                                           IsDictionaryLikeTypeName(propertyElement.ClrPropertyTypeName);
+                    var collectionElementTypeName = GetCollectionElementTypeName(propertyElement.ClrPropertyTypeName);
+                    if (string.IsNullOrWhiteSpace(collectionElementTypeName) &&
+                        propertyElement.PropertyName.Equals("Bindings", StringComparison.Ordinal))
+                    {
+                        collectionElementTypeName = "global::System.Windows.Data.BindingBase";
+                    }
                     for (var index = 0; index < createdValues.Count; index++)
                     {
                         var childVariable = createdValues[index];
+                        var childValueExpression = BuildChildValueExpression(
+                            propertyElement.ObjectValues[index],
+                            childVariable,
+                            collectionElementTypeName);
                         if (isDictionaryAdd)
                         {
                             var keyExpression = BuildDictionaryKeyExpression(
@@ -1012,14 +1390,45 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                             Builder.AppendLine(
                                 MemberIndent + "    " +
                                 instanceVariable + "." + propertyElement.PropertyName + ".Add(" +
-                                keyExpression + ", " + childVariable + ");");
+                                keyExpression + ", " + childValueExpression + ");");
                         }
                         else
                         {
                             Builder.AppendLine(
                                 MemberIndent + "    " +
-                                instanceVariable + "." + propertyElement.PropertyName + ".Add(" + childVariable + ");");
+                                instanceVariable + "." + propertyElement.PropertyName + ".Add(" + childValueExpression + ");");
                         }
+                    }
+
+                    continue;
+                }
+
+                if (IsBindingBaseTypeName(propertyElement.ObjectValues[0].TypeName))
+                {
+                    var bindingExpression = BuildChildValueExpression(
+                        propertyElement.ObjectValues[0],
+                        createdValues[0],
+                        "global::System.Windows.Data.BindingBase");
+
+                    if (ShouldAssignBindingDirectly(node.TypeName, propertyElement.ClrPropertyTypeName, propertyElement.PropertyName))
+                    {
+                        Builder.AppendLine(
+                            MemberIndent + "    " +
+                            instanceVariable + "." + propertyElement.PropertyName + " = " + bindingExpression + ";");
+                    }
+                    else
+                    {
+                        var ownerTypeName = propertyElement.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId);
+                        if (string.IsNullOrWhiteSpace(ownerTypeName))
+                        {
+                            ownerTypeName = propertyElement.ClrPropertyOwnerTypeName ?? node.TypeName;
+                        }
+
+                        Builder.AppendLine(
+                            MemberIndent + "    global::System.Windows.Data.BindingOperations.SetBinding(" +
+                            instanceVariable + ", " +
+                            QualifyType(ownerTypeName) + "." + propertyElement.PropertyName + "Property, " +
+                            bindingExpression + ");");
                     }
 
                     continue;
@@ -1027,7 +1436,8 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
                 Builder.AppendLine(
                     MemberIndent + "    " +
-                    instanceVariable + "." + propertyElement.PropertyName + " = " + createdValues[0] + ";");
+                    instanceVariable + "." + propertyElement.PropertyName + " = " +
+                    BuildChildValueExpression(propertyElement.ObjectValues[0], createdValues[0], propertyElement.ClrPropertyTypeName) + ";");
             }
         }
 
@@ -1044,13 +1454,16 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     !string.IsNullOrWhiteSpace(subscription.RoutedEventOwnerTypeName) &&
                     !string.IsNullOrWhiteSpace(subscription.RoutedEventFieldName))
                 {
+                    var handlerTypeName = string.IsNullOrWhiteSpace(subscription.RoutedEventHandlerTypeName)
+                        ? "global::System.Windows.RoutedEventHandler"
+                        : QualifyType(subscription.RoutedEventHandlerTypeName);
                     Builder.AppendLine(
                         MemberIndent + "    " +
                         instanceVariable +
                         ".AddHandler(" +
                         QualifyType(subscription.RoutedEventOwnerTypeName) +
                         "." + subscription.RoutedEventFieldName +
-                        ", new global::System.Windows.RoutedEventHandler(this." +
+                        ", new " + handlerTypeName + "(this." +
                         subscription.HandlerMethodName + "));" );
                     continue;
                 }
@@ -1121,9 +1534,20 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 case ResolvedChildAttachmentMode.ChildrenCollection:
                 case ResolvedChildAttachmentMode.ItemsCollection:
                 case ResolvedChildAttachmentMode.DirectAdd:
+                    // When a MarkupExtension that is not a BindingBase is added to a
+                    // BindingCollection (i.e. MultiBinding.Bindings), call ProvideValue so
+                    // the extension can return the Binding it wraps.
+                    var addExpression = childVariable;
+                    if (contentProperty.Equals("Bindings", StringComparison.Ordinal) &&
+                        IsMarkupExtensionTypeName(child.TypeName) &&
+                        !IsBindingBaseTypeName(child.TypeName))
+                    {
+                        addExpression = "(global::System.Windows.Data.BindingBase)" +
+                                        "__WXSG_EvaluateMarkupExtension(" + childVariable + ")";
+                    }
                     Builder.AppendLine(
                         MemberIndent + "    " +
-                        parentVariable + "." + contentProperty + ".Add(" + childVariable + ");");
+                        parentVariable + "." + contentProperty + ".Add(" + addExpression + ");");
                     return;
                 case ResolvedChildAttachmentMode.DictionaryAdd:
                     var keyExpression = BuildDictionaryKeyExpression(contentProperty, child, childVariable);
@@ -1153,6 +1577,21 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             }
 
             return AsFallbackDictionaryKey(child);
+        }
+
+        private static string BuildChildValueExpression(ResolvedObjectNode child, string childVariable, string? targetTypeName)
+        {
+            if (string.IsNullOrWhiteSpace(targetTypeName))
+            {
+                return childVariable;
+            }
+
+            if (!IsMarkupExtensionTypeName(child.TypeName))
+            {
+                return childVariable;
+            }
+
+            return "(" + QualifyType(targetTypeName) + ")__WXSG_EvaluateMarkupExtension(" + childVariable + ")";
         }
 
         private static bool IsCollectionLikeTypeName(string? typeName)
@@ -1191,5 +1630,46 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
             return "\"" + child.TypeName.Replace("\"", "\\\"") + "\"";
         }
+    }
+
+    private static bool IsBindingBaseTypeName(string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            return false;
+        }
+
+        var normalizedTypeName = typeName.Replace("global::", string.Empty);
+        return normalizedTypeName.Equals("System.Windows.Data.BindingBase", StringComparison.Ordinal) ||
+               normalizedTypeName.Equals("System.Windows.Data.Binding", StringComparison.Ordinal) ||
+               normalizedTypeName.Equals("System.Windows.Data.MultiBinding", StringComparison.Ordinal) ||
+               normalizedTypeName.Equals("System.Windows.Data.PriorityBinding", StringComparison.Ordinal);
+    }
+
+    private static bool IsMarkupExtensionTypeName(string? typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            return false;
+        }
+
+        return typeName.EndsWith("Extension", StringComparison.Ordinal);
+    }
+
+    private static string? GetCollectionElementTypeName(string? collectionTypeName)
+    {
+        if (string.IsNullOrWhiteSpace(collectionTypeName))
+        {
+            return null;
+        }
+
+        var start = collectionTypeName.IndexOf('<');
+        var end = collectionTypeName.LastIndexOf('>');
+        if (start < 0 || end <= start)
+        {
+            return null;
+        }
+
+        return collectionTypeName.Substring(start + 1, end - start - 1).Trim();
     }
 }
