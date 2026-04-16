@@ -905,6 +905,16 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         }
 
         var trimmed = typeName.Trim();
+
+        // Handle nullable type suffix (e.g. "string?", "object?", "System.Uri?").
+        // Must be done before the switch so that "string?" is not treated as an unknown
+        // type name and incorrectly qualified as "global::string?" (invalid C#).
+        if (trimmed.EndsWith("?", StringComparison.Ordinal))
+        {
+            var inner = trimmed.Substring(0, trimmed.Length - 1);
+            return QualifyType(inner) + "?";
+        }
+
         switch (trimmed)
         {
             case "bool":
