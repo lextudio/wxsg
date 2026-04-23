@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 
 namespace Wxsg.Tests;
@@ -64,6 +65,49 @@ public class WpfSampleRegressionTests
         var generatedCode = artifact.ReadGeneratedCSharp();
 
         Assert.Contains("MergedDictionaries.Add(", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
+    {
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var generatorProject = Path.Combine(
+            repositoryRoot,
+            "src",
+            "XamlToCSharpGenerator.WPF",
+            "XamlToCSharpGenerator.WPF.csproj");
+
+        var buildOutput = RunProcess(
+            repositoryRoot,
+            "dotnet",
+            "build \"" + generatorProject + "\" -c Debug --no-restore --nologo -f netstandard2.0");
+        Assert.True(buildOutput.ExitCode == 0, buildOutput.Output);
+
+        var generatorAssemblyPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "XamlToCSharpGenerator.WPF",
+            "bin",
+            "Debug",
+            "netstandard2.0",
+            "XamlToCSharpGenerator.WPF.dll");
+
+        var generatorAssembly = Assembly.LoadFrom(generatorAssemblyPath);
+        var emitterType = generatorAssembly.GetType(
+            "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter",
+            throwOnError: true);
+
+        var method = emitterType!.GetMethod(
+            "ConvertLiteralExpression",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var converted = method!.Invoke(
+            null,
+            new object[] { "\"{x:Null}\"", "System.Windows.Media.Brush", null! });
+
+        Assert.Equal("null", converted);
     }
 
     private static SampleBuildArtifact BuildSample(string relativeProjectPath, string scenario)

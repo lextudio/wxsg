@@ -1070,6 +1070,8 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             var markupKind = XamlMarkupExtensionNameSemantics.Classify(markupInfo.Name);
             switch (markupKind)
             {
+                case XamlMarkupExtensionKind.Null:
+                    return ("null", ResolvedValueKind.Literal);
                 // Detect {Binding ...} — keep the raw XAML string as ValueExpression so the emitter
                 // can parse it and emit a SetBinding call.
                 case XamlMarkupExtensionKind.Binding:

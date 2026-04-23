@@ -692,6 +692,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return valueExpression;
         }
 
+        if (MarkupParser.TryParseMarkupExtension(literalValue, out var markupInfo) &&
+            XamlMarkupExtensionNameSemantics.Classify(markupInfo.Name) == XamlMarkupExtensionKind.Null)
+        {
+            return "null";
+        }
+
         // Check for a WXSG-encoded unknown markup extension written by the binder.
         // The encoding starts with '\x1e' (Record Separator) followed by "wxsg-ume".
         if (literalValue.Length > 0 && literalValue[0] == '\x1e' &&
