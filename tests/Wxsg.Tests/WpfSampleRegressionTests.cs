@@ -1,0 +1,226 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text;
+
+namespace Wxsg.Tests;
+
+public class WpfSampleRegressionTests
+{
+    [Fact]
+    public void MultiBinding_ItemsSource_Sample_Builds_And_Uses_DependencyProperty_Binding()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/multibinding/MultiBindingSample.csproj",
+            "wpf-sample-multibinding-itemsource");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("BindingOperations.SetBinding(", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("ItemsControl.ItemsSourceProperty", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ItemsSource.Add(", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IEnumerable.Add(", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MultiBinding_DependencyProperty_Sample_Builds_And_Uses_DependencyProperty_Binding()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/multibinding-properties/MultiBindingPropertySample.csproj",
+            "wpf-sample-multibinding-properties");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("BindingOperations.SetBinding(", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("TextBlock.TextProperty", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("UIElement.VisibilityProperty", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Visibility = __node", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Text = __node", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MergedDictionaries_Sample_Builds_Successfully()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/mergeddictionaries/MergedDictionariesSample.csproj",
+            "wpf-sample-mergeddictionaries");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("MergedDictionaries.Add(", generatedCode, StringComparison.Ordinal);
+    }
+
+    private static SampleBuildArtifact BuildSample(string relativeProjectPath, string scenario)
+    {
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var projectPath = Path.Combine(repositoryRoot, relativeProjectPath.Replace('/', Path.DirectorySeparatorChar));
+        var workspaceDirectory = CreateTemporaryDirectory(repositoryRoot, scenario);
+        var generatedDirectory = Path.Combine(workspaceDirectory, "generated");
+
+        try
+        {
+            Directory.CreateDirectory(generatedDirectory);
+
+            var restoreOutput = RunProcess(
+                repositoryRoot,
+                "dotnet",
+                RestoreArguments(projectPath));
+            Assert.True(restoreOutput.ExitCode == 0, restoreOutput.Output);
+
+            var buildOutput = RunProcess(
+                repositoryRoot,
+                "dotnet",
+                BuildArguments(projectPath, generatedDirectory));
+
+            Assert.True(buildOutput.ExitCode == 0, buildOutput.Output);
+            return new SampleBuildArtifact(workspaceDirectory, generatedDirectory);
+        }
+        catch
+        {
+            TryDeleteDirectory(workspaceDirectory);
+            throw;
+        }
+    }
+
+    private static string BuildArguments(string projectPath, string generatedDirectory)
+    {
+        return new StringBuilder()
+            .Append("build \"")
+            .Append(projectPath)
+            .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
+            .Append(BuildPropertyArguments(generatedDirectory))
+            .ToString();
+    }
+
+    private static string RestoreArguments(string projectPath)
+    {
+        return new StringBuilder()
+            .Append("restore \"")
+            .Append(projectPath)
+            .Append("\" --nologo -m:1 /nodeReuse:false --disable-build-servers")
+            .ToString();
+    }
+
+    private static string BuildPropertyArguments(string generatedDirectory)
+    {
+        return new StringBuilder()
+            .Append(" -p:EmitCompilerGeneratedFiles=true")
+            .Append(" -p:CompilerGeneratedFilesOutputPath=\"")
+            .Append(NormalizeForMsBuild(generatedDirectory))
+            .Append('"')
+            .ToString();
+    }
+
+    private static (int ExitCode, string Output) RunProcess(string workingDirectory, string fileName, string arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(startInfo);
+        Assert.NotNull(process);
+
+        var stdoutTask = process!.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        System.Threading.Tasks.Task.WaitAll(stdoutTask, stderrTask);
+
+        var outputBuilder = new StringBuilder();
+        outputBuilder.Append(stdoutTask.Result);
+        outputBuilder.Append(stderrTask.Result);
+        return (process.ExitCode, outputBuilder.ToString());
+    }
+
+    private static string GetWxsgRepositoryRoot()
+    {
+        return Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+    }
+
+    private static string NormalizeForMsBuild(string path)
+    {
+        return path.Replace('\\', '/');
+    }
+
+    private static string CreateTemporaryDirectory(string repositoryRoot, string scenario)
+    {
+        var directory = Path.Combine(
+            repositoryRoot,
+            ".tmp-tests",
+            scenario,
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private static void TryDeleteDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+            // Best-effort cleanup for test workspaces.
+        }
+    }
+
+    private sealed class SampleBuildArtifact : IDisposable
+    {
+        public SampleBuildArtifact(string workspaceDirectory, string generatedDirectory)
+        {
+            WorkspaceDirectory = workspaceDirectory;
+            GeneratedDirectory = generatedDirectory;
+        }
+
+        public string WorkspaceDirectory { get; }
+
+        public string GeneratedDirectory { get; }
+
+        public string ReadGeneratedCSharp()
+        {
+            var generatedFiles = Directory.GetFiles(GeneratedDirectory, "*.cs", SearchOption.AllDirectories);
+            Assert.NotEmpty(generatedFiles);
+
+            var builder = new StringBuilder();
+            foreach (var file in generatedFiles.OrderBy(static path => path, StringComparer.OrdinalIgnoreCase))
+            {
+                builder.AppendLine(File.ReadAllText(file));
+            }
+
+            return builder.ToString();
+        }
+
+        public void Dispose()
+        {
+            TryDeleteDirectory(WorkspaceDirectory);
+        }
+    }
+}

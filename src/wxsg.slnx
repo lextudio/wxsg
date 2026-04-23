@@ -7,4 +7,5 @@
   <Project Path="XamlToCSharpGenerator.Generator.WPF/XamlToCSharpGenerator.Generator.WPF.csproj" />
   <Project Path="XamlToCSharpGenerator.Build.WPF/XamlToCSharpGenerator.Build.WPF.csproj" />
   <Project Path="XamlToCSharpGenerator.WPF/XamlToCSharpGenerator.WPF.csproj" />
+  <Project Path="../tests/Wxsg.Tests/Wxsg.Tests.csproj" />
 </Solution>
