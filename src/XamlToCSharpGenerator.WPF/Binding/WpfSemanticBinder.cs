@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -116,6 +117,11 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
 
     private static ResolvedObjectNode BindObjectNode(XamlObjectNode node, BindingContext context)
     {
+        if (string.Equals(node.XmlTypeName, "Array", StringComparison.Ordinal))
+        {
+            return BindXamlArrayNode(node, context);
+        }
+
         var nodeType = ResolveTypeSymbol(node.XmlNamespace, node.XmlTypeName, node.TypeArguments, context);
         if (nodeType is null)
         {
@@ -177,6 +183,51 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             Column: node.Column,
             Condition: node.Condition,
             ContentPropertyTypeName: contentPropertyType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+    }
+
+    private static ResolvedObjectNode BindXamlArrayNode(XamlObjectNode node, BindingContext context)
+    {
+        var elementType = ResolveTypeToken(node.ArrayItemType ?? string.Empty, context);
+        if (elementType is null)
+        {
+            context.AddUnknownTypeDiagnostic(node.ArrayItemType ?? "Array", node.Line, node.Column);
+        }
+
+        var elementTypeName = elementType is not null
+            ? elementType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            : "object";
+
+        var children = ImmutableArray.CreateBuilder<ResolvedObjectNode>(node.ChildObjects.Length + node.ConstructorArguments.Length);
+        foreach (var constructorArgument in node.ConstructorArguments)
+        {
+            children.Add(BindObjectNode(constructorArgument, context));
+        }
+
+        foreach (var child in node.ChildObjects)
+        {
+            children.Add(BindObjectNode(child, context));
+        }
+
+        return new ResolvedObjectNode(
+            KeyExpression: BuildObjectNodeKeyExpression(node.Key),
+            Name: node.Name,
+            TypeName: "global::System.Object",
+            IsBindingObjectNode: false,
+            FactoryExpression: null,
+            FactoryValueRequirements: ResolvedValueRequirements.None,
+            UseServiceProviderConstructor: false,
+            UseTopDownInitialization: false,
+            PropertyAssignments: ImmutableArray<ResolvedPropertyAssignment>.Empty,
+            PropertyElementAssignments: ImmutableArray<ResolvedPropertyElementAssignment>.Empty,
+            EventSubscriptions: ImmutableArray<ResolvedEventSubscription>.Empty,
+            Children: children.ToImmutable(),
+            ChildAttachmentMode: ResolvedChildAttachmentMode.None,
+            ContentPropertyName: null,
+            Line: node.Line,
+            Column: node.Column,
+            Condition: node.Condition,
+            ContentPropertyTypeName: elementTypeName,
+            SemanticFlags: ResolvedObjectNodeSemanticFlags.IsXamlArray);
     }
 
     private static void BindPropertyAssignment(
@@ -260,7 +311,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                 return;
             }
 
-            var attachedPropertyType = ResolveAttachedPropertyType(ownerType, attachedPropertyName);
+            var attachedPropertyType = ResolveAttachedPropertyType(ownerType, attachedPropertyName, context);
             if (attachedPropertyType is null)
             {
                 context.AddUnknownPropertyDiagnostic(assignmentName, ownerType, assignment.Line, assignment.Column);
@@ -373,7 +424,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                 else
                 {
                     ownerTypeName = ToDisplayName(ownerType);
-                    propertyTypeName = ResolveAttachedPropertyType(ownerType, attachedPropertyName)?
+                    propertyTypeName = ResolveAttachedPropertyType(ownerType, attachedPropertyName, context)?
                         .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                     if (propertyTypeName is null)
                     {
@@ -602,7 +653,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         return compilation.GetTypeByMetadataName(metadataName);
     }
 
-    private static ITypeSymbol? ResolveAttachedPropertyType(INamedTypeSymbol ownerType, string propertyName)
+    private static ITypeSymbol? ResolveAttachedPropertyType(INamedTypeSymbol ownerType, string propertyName, BindingContext context)
     {
         foreach (var lookupType in EnumerateInstanceMemberLookupTypes(ownerType))
         {
@@ -635,12 +686,144 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                 .FirstOrDefault(field => field.IsStatic);
             if (propertyField is not null)
             {
-                // If only the DependencyProperty field is present, we cannot infer the value type.
-                return propertyField.Type;
+                if (propertyField.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) != "global::System.Windows.DependencyProperty")
+                {
+                    return propertyField.Type;
+                }
+
+                var reflectedType = ResolveAttachedPropertyTypeFromRuntime(ownerType, propertyName, context);
+                if (reflectedType is not null)
+                {
+                    return reflectedType;
+                }
             }
         }
 
         return null;
+    }
+
+    private static ITypeSymbol? ResolveAttachedPropertyTypeFromRuntime(
+        INamedTypeSymbol ownerType,
+        string propertyName,
+        BindingContext context)
+    {
+        var runtimeType = ResolveRuntimeType(ownerType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        if (runtimeType is null)
+        {
+            return null;
+        }
+
+        var flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        foreach (var current in EnumerateRuntimeMemberLookupTypes(runtimeType))
+        {
+            var setter = current.GetMethod("Set" + propertyName, flags);
+            var setterParameters = setter?.GetParameters();
+            if (setterParameters is not null && setterParameters.Length >= 2)
+            {
+                return ResolveRuntimeTypeSymbol(setterParameters[1].ParameterType, context);
+            }
+
+            var getter = current.GetMethod("Get" + propertyName, flags);
+            if (getter is not null)
+            {
+                return ResolveRuntimeTypeSymbol(getter.ReturnType, context);
+            }
+
+            var staticProperty = current.GetProperty(propertyName, flags);
+            if (staticProperty is not null)
+            {
+                return ResolveRuntimeTypeSymbol(staticProperty.PropertyType, context);
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<Type> EnumerateRuntimeMemberLookupTypes(Type type)
+    {
+        for (Type? current = type; current is not null; current = current.BaseType)
+        {
+            yield return current;
+        }
+    }
+
+    private static Type? ResolveRuntimeType(string metadataName)
+    {
+        if (string.IsNullOrWhiteSpace(metadataName))
+        {
+            return null;
+        }
+
+        var normalizedName = metadataName.Replace("global::", string.Empty);
+        var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+        foreach (var assembly in assemblies)
+        {
+            var direct = assembly.GetType(normalizedName, throwOnError: false);
+            if (direct is not null)
+            {
+                return direct;
+            }
+        }
+
+        foreach (var assembly in assemblies)
+        {
+            Type[] types;
+            try
+            {
+                types = assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException rtl)
+            {
+                types = rtl.Types;
+            }
+
+            foreach (var candidate in types)
+            {
+                if (candidate is null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(candidate.FullName, normalizedName, StringComparison.Ordinal) ||
+                    string.Equals(candidate.Name, normalizedName, StringComparison.Ordinal))
+                {
+                    return candidate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static ITypeSymbol? ResolveRuntimeTypeSymbol(Type runtimeType, BindingContext context)
+    {
+        if (runtimeType == typeof(bool))
+        {
+            return context.Compilation.GetSpecialType(SpecialType.System_Boolean);
+        }
+
+        if (runtimeType == typeof(int))
+        {
+            return context.Compilation.GetSpecialType(SpecialType.System_Int32);
+        }
+
+        if (runtimeType == typeof(double))
+        {
+            return context.Compilation.GetSpecialType(SpecialType.System_Double);
+        }
+
+        if (runtimeType == typeof(string))
+        {
+            return context.Compilation.GetSpecialType(SpecialType.System_String);
+        }
+
+        var metadataName = runtimeType.FullName?.Replace('+', '.');
+        if (string.IsNullOrWhiteSpace(metadataName))
+        {
+            return null;
+        }
+
+        return context.Compilation.GetTypeByMetadataName(metadataName);
     }
 
     private static bool IsSameOrDerivedFrom(INamedTypeSymbol type, INamedTypeSymbol baseType)

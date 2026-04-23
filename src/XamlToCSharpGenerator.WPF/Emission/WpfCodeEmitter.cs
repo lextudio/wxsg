@@ -862,7 +862,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
     {
         if (items.Length == 0)
         {
-            return "global::System.Array.Empty<string>()";
+            return "new string[0]";
         }
 
         var parts = new string[items.Length];
@@ -1508,6 +1508,24 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             var localVariable = "__node" + _localCounter.ToString(CultureInfo.InvariantCulture);
             _localCounter++;
 
+            if (child.HasSemantic(ResolvedObjectNodeSemanticFlags.IsXamlArray))
+            {
+                var arrayItems = new List<string>(child.Children.Length);
+                foreach (var arrayChild in child.Children)
+                {
+                    arrayItems.Add(EmitChildObjectCreation(arrayChild, ambientStyleTargetTypeExpression));
+                }
+
+                var elementTypeName = string.IsNullOrWhiteSpace(child.ContentPropertyTypeName)
+                    ? "object"
+                    : QualifyType(child.ContentPropertyTypeName);
+                var arrayExpression = arrayItems.Count == 0
+                    ? "new " + elementTypeName + "[0]"
+                    : "new " + elementTypeName + "[] { " + string.Join(", ", arrayItems) + " }";
+                Builder.AppendLine(MemberIndent + "    var " + localVariable + " = " + arrayExpression + ";");
+                return localVariable;
+            }
+
             var creationExpression = !string.IsNullOrWhiteSpace(child.FactoryExpression)
                 ? child.FactoryExpression
                 : "new " + QualifyType(child.TypeName) + "()";
@@ -1628,7 +1646,9 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
             var normalized = typeName.Replace("global::", string.Empty);
             return normalized.Contains("IDictionary", StringComparison.Ordinal) ||
-                   normalized.Contains("Dictionary", StringComparison.Ordinal);
+                   normalized.EndsWith("Dictionary", StringComparison.Ordinal) ||
+                   normalized.EndsWith("Dictionary`1", StringComparison.Ordinal) ||
+                   normalized.EndsWith("Dictionary`2", StringComparison.Ordinal);
         }
 
         private static string AsFallbackDictionaryKey(ResolvedObjectNode child)
