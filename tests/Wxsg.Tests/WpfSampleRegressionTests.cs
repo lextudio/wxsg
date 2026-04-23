@@ -110,6 +110,77 @@ public class WpfSampleRegressionTests
         Assert.Equal("null", converted);
     }
 
+    [Fact]
+    public void WpfEmitter_Resolves_StaticResource_In_Binding_Source_Arguments()
+    {
+        var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
+        var graphEmitterType = generatorAssembly.GetType(
+            "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter+GraphEmitter",
+            throwOnError: true);
+
+        var method = graphEmitterType!.GetMethod(
+            "BuildBindingMarkupArgumentExpression",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var converted = method!.Invoke(
+            null,
+            new object[] { "{StaticResource toolBoxItems}", "object", "this" }) as string;
+
+        Assert.Equal("__WXSG_ResolveStaticResource(this, \"{StaticResource toolBoxItems}\")", converted);
+    }
+
+    [Fact]
+    public void WpfEmitter_Resolves_XType_In_RelativeSource_AncestorType_Arguments()
+    {
+        var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
+        var graphEmitterType = generatorAssembly.GetType(
+            "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter+GraphEmitter",
+            throwOnError: true);
+
+        var method = graphEmitterType!.GetMethod(
+            "TryBuildRelativeSourceExpression",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var arguments = new object[] { "{RelativeSource FindAncestor, AncestorType={x:Type Button}, AncestorLevel=2}", string.Empty };
+        var success = (bool)method!.Invoke(null, arguments)!;
+
+        Assert.True(success);
+        Assert.Equal(
+            "new global::System.Windows.Data.RelativeSource(global::System.Windows.Data.RelativeSourceMode.FindAncestor, __WXSG_ResolveTypeToken(\"Button\"), 2)",
+            arguments[1]);
+    }
+
+    private static Assembly BuildAndLoadWpfEmitterAssembly()
+    {
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var generatorProject = Path.Combine(
+            repositoryRoot,
+            "src",
+            "XamlToCSharpGenerator.WPF",
+            "XamlToCSharpGenerator.WPF.csproj");
+
+        var buildOutput = RunProcess(
+            repositoryRoot,
+            "dotnet",
+            "build \"" + generatorProject + "\" -c Debug --no-restore --nologo -f netstandard2.0");
+        Assert.True(buildOutput.ExitCode == 0, buildOutput.Output);
+
+        var generatorAssemblyPath = Path.Combine(
+            repositoryRoot,
+            "src",
+            "XamlToCSharpGenerator.WPF",
+            "bin",
+            "Debug",
+            "netstandard2.0",
+            "XamlToCSharpGenerator.WPF.dll");
+
+        return Assembly.LoadFrom(generatorAssemblyPath);
+    }
+
     private static SampleBuildArtifact BuildSample(string relativeProjectPath, string scenario)
     {
         var repositoryRoot = GetWxsgRepositoryRoot();

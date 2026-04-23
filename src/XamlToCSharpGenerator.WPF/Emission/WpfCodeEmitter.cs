@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using XamlToCSharpGenerator.Core.Abstractions;
@@ -698,6 +699,26 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return "null";
         }
 
+        if (MarkupParser.TryParseMarkupExtension(literalValue, out var typeMarkupInfo) &&
+            XamlMarkupExtensionNameSemantics.Classify(typeMarkupInfo.Name) == XamlMarkupExtensionKind.Type)
+        {
+            string? typeToken = null;
+            if (typeMarkupInfo.NamedArguments.TryGetValue("Type", out var namedTypeToken) ||
+                typeMarkupInfo.NamedArguments.TryGetValue("TypeName", out namedTypeToken))
+            {
+                typeToken = namedTypeToken;
+            }
+            else if (typeMarkupInfo.PositionalArguments.Length > 0)
+            {
+                typeToken = typeMarkupInfo.PositionalArguments[0];
+            }
+
+            if (!string.IsNullOrWhiteSpace(typeToken))
+            {
+                return "__WXSG_ResolveTypeToken(" + EscapeStringLiteral(XamlQuotedValueSemantics.TrimAndUnquote(typeToken).Trim()) + ")";
+            }
+        }
+
         // Check for a WXSG-encoded unknown markup extension written by the binder.
         // The encoding starts with '\x1e' (Record Separator) followed by "wxsg-ume".
         if (literalValue.Length > 0 && literalValue[0] == '\x1e' &&
@@ -1227,6 +1248,26 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 initParts.Add("Mode = global::System.Windows.Data.BindingMode." + mode);
             if (info.NamedArguments.TryGetValue("UpdateSourceTrigger", out var ust))
                 initParts.Add("UpdateSourceTrigger = global::System.Windows.Data.UpdateSourceTrigger." + ust);
+            if (info.NamedArguments.TryGetValue("ElementName", out var elementName))
+                initParts.Add("ElementName = " + ToBindingStringLiteral(elementName));
+            if (info.NamedArguments.TryGetValue("Source", out var source))
+                initParts.Add("Source = " + BuildBindingMarkupArgumentExpression(source, "object", instanceVariable));
+            if (info.NamedArguments.TryGetValue("Converter", out var converter))
+                initParts.Add("Converter = (global::System.Windows.Data.IValueConverter)" + BuildBindingMarkupArgumentExpression(converter, "object", instanceVariable));
+            if (info.NamedArguments.TryGetValue("ConverterParameter", out var converterParameter))
+                initParts.Add("ConverterParameter = " + BuildBindingMarkupArgumentExpression(converterParameter, "object", instanceVariable));
+            if (info.NamedArguments.TryGetValue("StringFormat", out var stringFormat))
+                initParts.Add("StringFormat = " + ToBindingStringLiteral(stringFormat));
+            if (info.NamedArguments.TryGetValue("FallbackValue", out var fallbackValue))
+                initParts.Add("FallbackValue = " + BuildBindingMarkupArgumentExpression(fallbackValue, "object", instanceVariable));
+            if (info.NamedArguments.TryGetValue("TargetNullValue", out var targetNullValue))
+                initParts.Add("TargetNullValue = " + BuildBindingMarkupArgumentExpression(targetNullValue, "object", instanceVariable));
+
+            if (info.NamedArguments.TryGetValue("RelativeSource", out var relativeSource) &&
+                TryBuildRelativeSourceExpression(relativeSource, out var relativeSourceExpression))
+            {
+                initParts.Add("RelativeSource = " + relativeSourceExpression);
+            }
 
             var bindingExpr = "new global::System.Windows.Data.Binding(" + pathLiteral + ")";
             if (initParts.Count > 0)
@@ -1287,6 +1328,97 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return false;
         }
 
+        private static string BuildBindingMarkupArgumentExpression(string rawValue, string? targetTypeName, string scopeExpression)
+        {
+            var trimmedValue = XamlQuotedValueSemantics.TrimAndUnquote(rawValue);
+            var quotedValue = EscapeStringLiteral(trimmedValue);
+            if (MarkupParser.TryParseMarkupExtension(trimmedValue, out var markupInfo))
+            {
+                switch (XamlMarkupExtensionNameSemantics.Classify(markupInfo.Name))
+                {
+                    case XamlMarkupExtensionKind.Null:
+                        return "null";
+                    case XamlMarkupExtensionKind.StaticResource:
+                        return "__WXSG_ResolveStaticResource(" + scopeExpression + ", " + quotedValue + ")";
+                    case XamlMarkupExtensionKind.Static:
+                        return "__WXSG_ResolveXStatic(" + quotedValue + ")";
+                    case XamlMarkupExtensionKind.Type:
+                        return ConvertLiteralExpression(quotedValue, "System.Type", scopeExpression);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(targetTypeName) ||
+                targetTypeName.Equals("object", StringComparison.Ordinal) ||
+                targetTypeName.Equals("System.Object", StringComparison.Ordinal))
+            {
+                return quotedValue;
+            }
+
+            return ConvertLiteralExpression(quotedValue, targetTypeName, scopeExpression);
+        }
+
+        private static string ToBindingStringLiteral(string rawValue)
+        {
+            return EscapeStringLiteral(XamlQuotedValueSemantics.TrimAndUnquote(rawValue));
+        }
+
+        private static bool TryBuildRelativeSourceExpression(string rawValue, out string expression)
+        {
+            expression = string.Empty;
+            var candidate = XamlQuotedValueSemantics.TrimAndUnquote(rawValue);
+            if (!MarkupParser.TryParseMarkupExtension(candidate, out var markupInfo) ||
+                XamlMarkupExtensionNameSemantics.Classify(markupInfo.Name) != XamlMarkupExtensionKind.RelativeSource)
+            {
+                return false;
+            }
+
+            var modeToken = markupInfo.PositionalArguments.Length > 0
+                ? XamlQuotedValueSemantics.TrimAndUnquote(markupInfo.PositionalArguments[0]).Trim()
+                : string.Empty;
+            if (modeToken.Length == 0 &&
+                markupInfo.NamedArguments.TryGetValue("Mode", out var namedModeToken))
+            {
+                modeToken = XamlQuotedValueSemantics.TrimAndUnquote(namedModeToken).Trim();
+            }
+
+            if (modeToken.Length == 0)
+            {
+                return false;
+            }
+
+            var qualifiedMode = "global::System.Windows.Data.RelativeSourceMode." + modeToken;
+            if (!modeToken.Equals("FindAncestor", StringComparison.Ordinal))
+            {
+                expression = "new global::System.Windows.Data.RelativeSource(" + qualifiedMode + ")";
+                return true;
+            }
+
+            var ancestorTypeExpression = "null";
+            if (markupInfo.NamedArguments.TryGetValue("AncestorType", out var ancestorTypeToken))
+            {
+                ancestorTypeExpression = BuildBindingMarkupArgumentExpression(
+                    ancestorTypeToken,
+                    "System.Type",
+                    "global::System.Windows.Application.Current");
+            }
+
+            var ancestorLevelExpression = "1";
+            if (markupInfo.NamedArguments.TryGetValue("AncestorLevel", out var ancestorLevelToken))
+            {
+                ancestorLevelExpression = BuildBindingMarkupArgumentExpression(
+                    ancestorLevelToken,
+                    "System.Int32",
+                    "global::System.Windows.Application.Current");
+            }
+
+            expression =
+                "new global::System.Windows.Data.RelativeSource(" +
+                qualifiedMode + ", " +
+                ancestorTypeExpression + ", " +
+                ancestorLevelExpression + ")";
+            return true;
+        }
+
         public void EmitHotReloadCollectionCleanup(ResolvedObjectNode rootNode)
         {
             var emittedMemberAccesses = new HashSet<string>(StringComparer.Ordinal);
@@ -1324,7 +1456,8 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
                 var forceResourcesDictionaryAdd =
                     propertyElement.PropertyName.Equals("Resources", StringComparison.Ordinal) &&
-                    propertyElement.ObjectValues.Length > 0;
+                    propertyElement.ObjectValues.Length > 0 &&
+                    !AllObjectValuesAreResourceDictionaries(propertyElement.ObjectValues);
 
                 if (!(propertyElement.IsCollectionAdd ||
                       IsCollectionLikeTypeName(propertyElement.ClrPropertyTypeName) ||
@@ -1387,6 +1520,15 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                             ".Set" + propertyElement.PropertyName + "(" + instanceVariable + ", " + childVariable + ");");
                     }
 
+                    continue;
+                }
+
+                if (propertyElement.PropertyName.Equals("Resources", StringComparison.Ordinal) &&
+                    AllObjectValuesAreResourceDictionaries(propertyElement.ObjectValues))
+                {
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        instanceVariable + "." + propertyElement.PropertyName + " = " + createdValues[0] + ";");
                     continue;
                 }
 
@@ -1584,6 +1726,14 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             var contentProperty = parent.ContentPropertyName;
             if (string.IsNullOrWhiteSpace(contentProperty))
             {
+                if (IsDictionaryLikeTypeName(parent.TypeName))
+                {
+                    var keyExpression = BuildDictionaryKeyExpression("Resources", child, childVariable);
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        parentVariable + ".Add(" + keyExpression + ", " + childVariable + ");");
+                }
+
                 return;
             }
 
@@ -1632,9 +1782,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     return;
                 case ResolvedChildAttachmentMode.DictionaryAdd:
                     var keyExpression = BuildDictionaryKeyExpression(contentProperty, child, childVariable);
+                    var dictionaryTarget = contentProperty == "__self"
+                        ? parentVariable
+                        : parentVariable + "." + contentProperty;
                     Builder.AppendLine(
                         MemberIndent + "    " +
-                        parentVariable + "." + contentProperty + ".Add(" + keyExpression + ", " + childVariable + ");");
+                        dictionaryTarget + ".Add(" + keyExpression + ", " + childVariable + ");");
                     return;
                 default:
                     return;
@@ -1711,6 +1864,22 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                    normalized.EndsWith("Dictionary", StringComparison.Ordinal) ||
                    normalized.EndsWith("Dictionary`1", StringComparison.Ordinal) ||
                    normalized.EndsWith("Dictionary`2", StringComparison.Ordinal);
+        }
+
+        private static bool AllObjectValuesAreResourceDictionaries(ImmutableArray<ResolvedObjectNode> objectValues)
+        {
+            foreach (var objectValue in objectValues)
+            {
+                if (!string.Equals(
+                        objectValue.TypeName.Replace("global::", string.Empty),
+                        "System.Windows.ResourceDictionary",
+                        StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return objectValues.Length > 0;
         }
 
         private static string AsFallbackDictionaryKey(ResolvedObjectNode child)

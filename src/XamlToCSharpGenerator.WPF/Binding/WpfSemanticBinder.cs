@@ -162,6 +162,13 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
 
         var contentPropertyName = FindContentPropertyName(nodeType);
         var contentPropertyType = FindProperty(nodeType, contentPropertyName ?? string.Empty)?.Type;
+        if (string.IsNullOrWhiteSpace(contentPropertyName) &&
+            IsDictionaryLikeType(nodeType))
+        {
+            contentPropertyName = "__self";
+            contentPropertyType = nodeType;
+        }
+
         var childAttachmentMode = ResolveChildAttachmentMode(children.Count, contentPropertyName, contentPropertyType);
 
         return new ResolvedObjectNode(
