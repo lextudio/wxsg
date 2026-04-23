@@ -1,0 +1,30 @@
+<Window x:Class="MultiBindingPropertySample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MultiBinding Property Sample" Height="240" Width="420">
+    <StackPanel Margin="20">
+        <TextBlock FontSize="18" FontWeight="Bold">
+            <TextBlock.Text>
+                <MultiBinding Converter="{StaticResource SummaryConverter}">
+                    <Binding Path="FirstName" />
+                    <Binding Path="LastName" />
+                </MultiBinding>
+            </TextBlock.Text>
+        </TextBlock>
+
+        <CheckBox Margin="0,16,0,0"
+                  Content="Show details"
+                  IsChecked="{Binding ShowDetails}" />
+
+        <Border Margin="0,12,0,0" Padding="12" Background="LightSteelBlue">
+            <Border.Visibility>
+                <MultiBinding Converter="{StaticResource DetailsVisibilityConverter}">
+                    <Binding Path="ShowDetails" />
+                    <Binding Path="HasDetails" />
+                </MultiBinding>
+            </Border.Visibility>
+
+            <TextBlock Text="{Binding Details}" />
+        </Border>
+    </StackPanel>
+</Window>
