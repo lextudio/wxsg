@@ -68,6 +68,32 @@ public class WpfSampleRegressionTests
     }
 
     [Fact]
+    public void ResourceDictionary_XArray_Binding_Sample_Assigns_Keyed_Array_Resources()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/resourcearraybinding/ResourceArrayBindingSample.csproj",
+            "wpf-sample-resource-array-binding");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("__root.Resources = __node0;", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("__node0.Add(\"toolBoxItems\", __node1);", generatedCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "Source = __WXSG_ResolveStaticResource(__node",
+            generatedCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "__root.Resources.Add(\"System.Windows.ResourceDictionary\"",
+            generatedCode,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
     {
         var repositoryRoot = GetWxsgRepositoryRoot();
