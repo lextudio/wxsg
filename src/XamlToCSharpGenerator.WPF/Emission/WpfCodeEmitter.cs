@@ -366,7 +366,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve dependency property token '\" + __token + \"'.\");");
         sb.AppendLine(i + "}");
         sb.AppendLine();
-        sb.AppendLine(i + "private static object __WXSG_ResolveStaticResource(string __token)");
+        sb.AppendLine(i + "private static object __WXSG_ResolveStaticResource(object __scope, string __token)");
         sb.AppendLine(i + "{");
         sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__token))");
         sb.AppendLine(i + "    {");
@@ -409,8 +409,21 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "        }");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i);
-        sb.AppendLine(i + "    var __app = global::System.Windows.Application.Current;");
-        sb.AppendLine(i + "    var __resource = __app?.TryFindResource(__key);");
+        sb.AppendLine(i + "    object __resource = null;");
+        sb.AppendLine(i + "    if (__scope is global::System.Windows.FrameworkElement __frameworkElement)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __resource = __frameworkElement.TryFindResource(__key);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__scope is global::System.Windows.FrameworkContentElement __contentElement)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __resource = __contentElement.TryFindResource(__key);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "    if (__resource is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __app = global::System.Windows.Application.Current;");
+        sb.AppendLine(i + "        __resource = __app?.TryFindResource(__key);");
+        sb.AppendLine(i + "    }");
         sb.AppendLine(i + "    return __resource;");
         sb.AppendLine(i + "}");
         sb.AppendLine();
@@ -661,7 +674,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         return string.Equals(typeName, "System.Windows.Application", StringComparison.Ordinal);
     }
 
-    private static string ConvertLiteralExpression(string valueExpression, string? clrPropertyTypeName)
+    private static string ConvertLiteralExpression(string valueExpression, string? clrPropertyTypeName, string? scopeExpression = null)
     {
         if (string.IsNullOrWhiteSpace(clrPropertyTypeName))
         {
@@ -707,7 +720,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         if (literalValue.StartsWith("{StaticResource ", StringComparison.Ordinal) &&
             literalValue.EndsWith("}", StringComparison.Ordinal))
         {
-            return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveStaticResource(" + valueExpression + ")";
+            var resourceScopeExpression = string.IsNullOrWhiteSpace(scopeExpression)
+                ? "global::System.Windows.Application.Current"
+                : scopeExpression;
+            return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveStaticResource(" +
+                   resourceScopeExpression + ", " + valueExpression + ")";
         }
 
         if (literalValue.StartsWith("{x:Static ", StringComparison.Ordinal) &&
@@ -1100,7 +1117,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 if (string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Setter", StringComparison.Ordinal) &&
                     string.Equals(assignment.PropertyName, "Value", StringComparison.Ordinal))
                 {
-                    var convertedSetterValue = ConvertLiteralExpression(assignment.ValueExpression, assignment.ClrPropertyTypeName);
+                    var convertedSetterValue = ConvertLiteralExpression(
+                        assignment.ValueExpression,
+                        assignment.ClrPropertyTypeName,
+                        instanceVariable);
                     Builder.AppendLine(
                         MemberIndent + "    " +
                         instanceVariable + "." + assignment.PropertyName + " = " +
@@ -1158,7 +1178,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     continue;
                 }
 
-                var convertedValue = ConvertLiteralExpression(assignment.ValueExpression, assignment.ClrPropertyTypeName);
+                var convertedValue = ConvertLiteralExpression(
+                    assignment.ValueExpression,
+                    assignment.ClrPropertyTypeName,
+                    instanceVariable);
                 var frameworkOwner = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId);
                 if (!string.IsNullOrWhiteSpace(frameworkOwner))
                 {
@@ -1372,53 +1395,17 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     propertyElement.PropertyName.Equals("Resources", StringComparison.Ordinal) &&
                     propertyElement.ObjectValues.Length > 0;
 
-                if (propertyElement.IsCollectionAdd ||
-                    IsCollectionLikeTypeName(propertyElement.ClrPropertyTypeName) ||
-                    forceResourcesDictionaryAdd)
-                {
-                    var isDictionaryAdd = forceResourcesDictionaryAdd ||
-                                          IsDictionaryLikeTypeName(propertyElement.ClrPropertyTypeName);
-                    var collectionElementTypeName = GetCollectionElementTypeName(propertyElement.ClrPropertyTypeName);
-                    if (string.IsNullOrWhiteSpace(collectionElementTypeName) &&
-                        propertyElement.PropertyName.Equals("Bindings", StringComparison.Ordinal))
-                    {
-                        collectionElementTypeName = "global::System.Windows.Data.BindingBase";
-                    }
-                    for (var index = 0; index < createdValues.Count; index++)
-                    {
-                        var childVariable = createdValues[index];
-                        var childValueExpression = BuildChildValueExpression(
-                            propertyElement.ObjectValues[index],
-                            childVariable,
-                            collectionElementTypeName);
-                        if (isDictionaryAdd)
-                        {
-                            var keyExpression = BuildDictionaryKeyExpression(
-                                propertyElement.PropertyName,
-                                propertyElement.ObjectValues[index],
-                                childVariable);
-                            Builder.AppendLine(
-                                MemberIndent + "    " +
-                                instanceVariable + "." + propertyElement.PropertyName + ".Add(" +
-                                keyExpression + ", " + childValueExpression + ");");
-                        }
-                        else
-                        {
-                            Builder.AppendLine(
-                                MemberIndent + "    " +
-                                instanceVariable + "." + propertyElement.PropertyName + ".Add(" + childValueExpression + ");");
-                        }
-                    }
-
-                    continue;
-                }
-
-                if (IsBindingBaseTypeName(propertyElement.ObjectValues[0].TypeName))
+                // Check if property value is a BindingBase BEFORE checking if property type is collection-like.
+                // This ensures MultiBinding on IEnumerable properties (like ItemsSource) uses SetBinding,
+                // not .Add() which doesn't exist on IEnumerable.
+                if (propertyElement.ObjectValues.Length > 0 &&
+                    IsBindingBaseTypeName(propertyElement.ObjectValues[0].TypeName))
                 {
                     var bindingExpression = BuildChildValueExpression(
                         propertyElement.ObjectValues[0],
                         createdValues[0],
-                        "global::System.Windows.Data.BindingBase");
+                        "global::System.Windows.Data.BindingBase",
+                        instanceVariable);
 
                     if (ShouldAssignBindingDirectly(node.TypeName, propertyElement.ClrPropertyTypeName, propertyElement.PropertyName))
                     {
@@ -1444,10 +1431,57 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     continue;
                 }
 
+                // Handle collection properties
+                if (propertyElement.IsCollectionAdd ||
+                    IsCollectionLikeTypeName(propertyElement.ClrPropertyTypeName) ||
+                    forceResourcesDictionaryAdd)
+                {
+                    var isDictionaryAdd = forceResourcesDictionaryAdd ||
+                                          IsDictionaryLikeTypeName(propertyElement.ClrPropertyTypeName);
+                    var collectionElementTypeName = GetCollectionElementTypeName(propertyElement.ClrPropertyTypeName);
+                    if (string.IsNullOrWhiteSpace(collectionElementTypeName) &&
+                        propertyElement.PropertyName.Equals("Bindings", StringComparison.Ordinal))
+                    {
+                        collectionElementTypeName = "global::System.Windows.Data.BindingBase";
+                    }
+                    for (var index = 0; index < createdValues.Count; index++)
+                    {
+                        var childVariable = createdValues[index];
+                        var childValueExpression = BuildChildValueExpression(
+                            propertyElement.ObjectValues[index],
+                            childVariable,
+                            collectionElementTypeName,
+                            instanceVariable);
+                        if (isDictionaryAdd)
+                        {
+                            var keyExpression = BuildDictionaryKeyExpression(
+                                propertyElement.PropertyName,
+                                propertyElement.ObjectValues[index],
+                                childVariable);
+                            Builder.AppendLine(
+                                MemberIndent + "    " +
+                                instanceVariable + "." + propertyElement.PropertyName + ".Add(" +
+                                keyExpression + ", " + childValueExpression + ");");
+                        }
+                        else
+                        {
+                            Builder.AppendLine(
+                                MemberIndent + "    " +
+                                instanceVariable + "." + propertyElement.PropertyName + ".Add(" + childValueExpression + ");");
+                        }
+                    }
+
+                    continue;
+                }
+
                 Builder.AppendLine(
                     MemberIndent + "    " +
                     instanceVariable + "." + propertyElement.PropertyName + " = " +
-                    BuildChildValueExpression(propertyElement.ObjectValues[0], createdValues[0], propertyElement.ClrPropertyTypeName) + ";");
+                    BuildChildValueExpression(
+                        propertyElement.ObjectValues[0],
+                        createdValues[0],
+                        propertyElement.ClrPropertyTypeName,
+                        instanceVariable) + ";");
             }
         }
 
@@ -1562,6 +1596,19 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 case ResolvedChildAttachmentMode.ChildrenCollection:
                 case ResolvedChildAttachmentMode.ItemsCollection:
                 case ResolvedChildAttachmentMode.DirectAdd:
+                    // When attaching a BindingBase (Binding, MultiBinding, PriorityBinding) to a
+                    // property that is not a BindingCollection (MultiBinding.Bindings), use SetBinding.
+                    if (IsBindingBaseTypeName(child.TypeName) &&
+                        !contentProperty.Equals("Bindings", StringComparison.Ordinal))
+                    {
+                        Builder.AppendLine(
+                            MemberIndent + "    global::System.Windows.Data.BindingOperations.SetBinding(" +
+                            parentVariable + ", " +
+                            QualifyType(parent.TypeName) + "." + contentProperty + "Property, " +
+                            childVariable + ");");
+                        return;
+                    }
+
                     // When a MarkupExtension that is not a BindingBase is added to a
                     // BindingCollection (i.e. MultiBinding.Bindings), call ProvideValue so
                     // the extension can return the Binding it wraps.
@@ -1607,7 +1654,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             return AsFallbackDictionaryKey(child);
         }
 
-        private static string BuildChildValueExpression(ResolvedObjectNode child, string childVariable, string? targetTypeName)
+        private static string BuildChildValueExpression(
+            ResolvedObjectNode child,
+            string childVariable,
+            string? targetTypeName,
+            string? scopeExpression)
         {
             if (string.IsNullOrWhiteSpace(targetTypeName))
             {
@@ -1617,6 +1668,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             if (!IsMarkupExtensionTypeName(child.TypeName))
             {
                 return childVariable;
+            }
+
+            if (scopeExpression is null)
+            {
+                scopeExpression = "global::System.Windows.Application.Current";
             }
 
             return "(" + QualifyType(targetTypeName) + ")__WXSG_EvaluateMarkupExtension(" + childVariable + ")";

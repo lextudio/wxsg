@@ -1,0 +1,31 @@
+<Window x:Class="MultiBindingSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:MultiBindingSample"
+        Title="MultiBinding ItemsSource Sample" Height="300" Width="500">
+    <Window.Resources>
+        <local:DataConverter x:Key="DataConverter" />
+    </Window.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
+            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <TextBox x:Name="FilterTextBox" Width="200" Margin="0,0,10,0" />
+            <CheckBox x:Name="ActiveOnlyCheckBox" Content="Active Only" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <ListBox Grid.Row="1" Margin="10" x:Name="ItemsList">
+            <ListBox.ItemsSource>
+                <MultiBinding Converter="{StaticResource DataConverter}">
+                    <Binding Path="Items" />
+                    <Binding ElementName="FilterTextBox" Path="Text" />
+                    <Binding ElementName="ActiveOnlyCheckBox" Path="IsChecked" />
+                </MultiBinding>
+            </ListBox.ItemsSource>
+        </ListBox>
+    </Grid>
+</Window>
