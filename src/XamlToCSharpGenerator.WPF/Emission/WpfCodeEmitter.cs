@@ -140,6 +140,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "private void __WXSG_BuildObjectGraph()");
         sb.AppendLine(i + "{");
         sb.AppendLine(i + "    var __root = this;");
+        if (viewModel.NamedElements.Length > 0)
+        {
+            sb.AppendLine(i + "    if (global::System.Windows.NameScope.GetNameScope(__root) == null)");
+            sb.AppendLine(i + "        global::System.Windows.NameScope.SetNameScope(__root, new global::System.Windows.NameScope());");
+        }
         sb.AppendLine(i + "    var __previousRootResourceScope = __WXSG_CurrentRootResourceScope;");
         sb.AppendLine(i + "    __WXSG_CurrentRootResourceScope = __root;");
         sb.AppendLine(i + "    try");
@@ -1211,6 +1216,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             }
 
             Builder.AppendLine(MemberIndent + "    this." + EscapeIdentifier(node.Name) + " = (" + QualifyType(fieldType) + ")" + instanceVariable + ";");
+            Builder.AppendLine(MemberIndent + "    this.RegisterName(" + EscapeStringLiteral(node.Name) + ", this." + EscapeIdentifier(node.Name) + ");");
         }
 
         private void EmitPropertyAssignments(
