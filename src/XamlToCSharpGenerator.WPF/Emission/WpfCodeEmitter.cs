@@ -228,7 +228,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine();
 
         EmitHotReloadReset(emitter, viewModel);
-        EmitRuntimeResolutionHelpers(emitter);
+        EmitRuntimeResolutionHelpers(emitter, viewModel.Document.ClassFullName);
     }
 
     private static void EmitHotReloadReset(GraphEmitter emitter, ResolvedViewModel viewModel)
@@ -293,7 +293,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "}");
     }
 
-    private static void EmitRuntimeResolutionHelpers(GraphEmitter emitter)
+    private static void EmitRuntimeResolutionHelpers(GraphEmitter emitter, string? docClassFullName)
     {
         var sb = emitter.Builder;
         var i = emitter.MemberIndent;
@@ -682,7 +682,14 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    if (__ownerType is null && __colonIdx >= 0)");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        // Search assemblies with calling assembly first");
-        sb.AppendLine(i + "        var __callingAsm = typeof(MainWindow).Assembly;");
+        if (!string.IsNullOrEmpty(docClassFullName))
+        {
+            sb.AppendLine(i + "        var __callingAsm = typeof(" + QualifyType(docClassFullName) + ").Assembly;");
+        }
+        else
+        {
+            sb.AppendLine(i + "        var __callingAsm = global::System.Reflection.Assembly.GetEntryAssembly() ?? typeof(global::System.Windows.Application).Assembly;");
+        }
         sb.AppendLine(i + "        var __allAssemblies = global::System.AppDomain.CurrentDomain.GetAssemblies();");
         sb.AppendLine(i + "        global::System.Collections.Generic.List<global::System.Reflection.Assembly> __asmSearchOrder = new();");
         sb.AppendLine(i + "        __asmSearchOrder.Add(__callingAsm);");

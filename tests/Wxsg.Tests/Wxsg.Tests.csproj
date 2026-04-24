@@ -6,6 +6,10 @@
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);NETSDK1187</NoWarn>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <!-- Disable the legacy MTP custom test target on newer SDKs; opt into the new dotnet test experience -->
+    <TestingPlatformDisableCustomTestTarget>true</TestingPlatformDisableCustomTestTarget>
+    <!-- Ensure MTP does not treat this project as a legacy testing platform application on newer SDKs -->
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
     <UseNewTestsExperience>true</UseNewTestsExperience>
   </PropertyGroup>
 

@@ -151,6 +151,26 @@ public class WpfSampleRegressionTests
     }
 
     [Fact]
+    public void MainView_Sample_With_No_MainWindow_Builds_And_Does_Not_Reference_MainWindow()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/mainview-sample/MainViewSample.csproj",
+            "wpf-sample-mainview");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        // Ensure generator does not emit a hard dependency on a MainWindow type
+        Assert.DoesNotContain("typeof(MainWindow).Assembly", generatedCode, StringComparison.Ordinal);
+        // Ensure startup window creation targets the MainView type
+        Assert.Contains("MainViewSample.MainView", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
     {
         var repositoryRoot = GetWxsgRepositoryRoot();
