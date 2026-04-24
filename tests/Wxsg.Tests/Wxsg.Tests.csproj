@@ -6,6 +6,7 @@
     <IsTestProject>true</IsTestProject>
     <NoWarn>$(NoWarn);NETSDK1187</NoWarn>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <UseNewTestsExperience>true</UseNewTestsExperience>
   </PropertyGroup>
 
   <ItemGroup>
