@@ -115,6 +115,13 @@
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'C#'">
     <PropertyGroup>
       <LangVersion Condition="'$(LangVersion)' == '' or '$(LangVersion)' == '7' or '$(LangVersion)' == '7.0' or '$(LangVersion)' == '7.1' or '$(LangVersion)' == '7.2' or '$(LangVersion)' == '7.3' or '$(LangVersion)' == '8' or '$(LangVersion)' == '8.0'">9.0</LangVersion>
+      <!--
+        Expose WXSG_ENABLED as a compile constant so user code can use #if WXSG_ENABLED
+        to guard any WXSG-specific sections without a hard project-file dependency.
+        Setting this in a target (not a PropertyGroup) guarantees it runs after the SDK
+        sets its own DefineConstants so our value is appended, not lost.
+      -->
+      <DefineConstants>$(DefineConstants);WXSG_ENABLED</DefineConstants>
     </PropertyGroup>
   </Target>
 
