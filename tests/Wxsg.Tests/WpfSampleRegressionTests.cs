@@ -113,6 +113,43 @@ public class WpfSampleRegressionTests
     }
 
     [Fact]
+    public void XStatic_CustomNs_Sample_Builds_And_Emits_XStatic_Token()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/xstatic-customns/XStaticCustomNsSample.csproj",
+            "wpf-sample-xstatic-customns");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("CollectionsToComposite", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EventSetter_Loaded_Sample_Does_Not_Use_TypeDescriptor_Converters()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/eventsetter-loaded/EventSetterLoadedSample.csproj",
+            "wpf-sample-eventsetter-loaded");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        // Generator should not rely on TypeDescriptor.ConvertFromInvariantString for RoutedEvent/Delegate
+        Assert.DoesNotContain("TypeDescriptor.GetConverter(typeof(global::System.Windows.RoutedEvent)).ConvertFromInvariantString", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("TypeDescriptor.GetConverter(typeof(global::System.Delegate)).ConvertFromInvariantString", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
     {
         var repositoryRoot = GetWxsgRepositoryRoot();
