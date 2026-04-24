@@ -1531,10 +1531,25 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     TryUnquote(assignment.ValueExpression, out var eventNameLiteral))
                 {
                     var targetTypeExpr = ambientStyleTargetTypeExpression ?? "typeof(global::System.Windows.FrameworkElement)";
-                    Builder.AppendLine(
-                        MemberIndent + "    " +
-                        instanceVariable + ".Event = __WXSG_ResolveRoutedEvent(" + targetTypeExpr + ", " +
-                        EscapeStringLiteral(eventNameLiteral.Trim()) + ");");
+                    var eventName = eventNameLiteral.Trim();
+
+                    // If the target type expression is a compile-time typeof(T) expression, prefer
+                    // emitting a direct static field access (e.g. T.LoadedEvent) to avoid runtime
+                    // assembly scanning via __WXSG_ResolveRoutedEvent.
+                    if (targetTypeExpr.StartsWith("typeof(", StringComparison.Ordinal))
+                    {
+                        var innerType = targetTypeExpr.Substring("typeof(".Length, targetTypeExpr.Length - "typeof(".Length - 1);
+                        Builder.AppendLine(
+                            MemberIndent + "    " +
+                            instanceVariable + ".Event = " + innerType + "." + eventName + "Event;");
+                    }
+                    else
+                    {
+                        Builder.AppendLine(
+                            MemberIndent + "    " +
+                            instanceVariable + ".Event = __WXSG_ResolveRoutedEvent(" + targetTypeExpr + ", " +
+                            EscapeStringLiteral(eventName) + ");");
+                    }
                     continue;
                 }
 
@@ -1543,12 +1558,18 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     string.Equals(assignment.PropertyName, "Handler", StringComparison.Ordinal) &&
                     TryUnquote(assignment.ValueExpression, out var handlerNameLiteral))
                 {
-                    var handlerFlags = "global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic";
-                    Builder.AppendLine(
-                        MemberIndent + "    " +
-                        instanceVariable + ".Handler = global::System.Delegate.CreateDelegate(" +
-                        instanceVariable + ".Event.HandlerType, this, " +
-                        "this.GetType().GetMethod(" + EscapeStringLiteral(handlerNameLiteral.Trim()) + ", " + handlerFlags + "));");
+                    var handlerName = handlerNameLiteral.Trim();
+                    var handlerFlags = "global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.DeclaredOnly";
+                    var miVar = "__mi_" + _localCounter++.ToString(CultureInfo.InvariantCulture);
+
+                    // Resolve the method on the current type but restrict to declared-only members to
+                    // avoid accidentally binding inherited methods with the same name.  Only create
+                    // the delegate if the method is found.
+                    Builder.AppendLine(MemberIndent + "    var " + miVar + " = this.GetType().GetMethod(" + EscapeStringLiteral(handlerName) + ", " + handlerFlags + ");");
+                    Builder.AppendLine(MemberIndent + "    if (" + miVar + " is not null)");
+                    Builder.AppendLine(MemberIndent + "    {");
+                    Builder.AppendLine(MemberIndent + "        " + instanceVariable + ".Handler = global::System.Delegate.CreateDelegate(" + instanceVariable + ".Event.HandlerType, this, " + miVar + ");");
+                    Builder.AppendLine(MemberIndent + "    }");
                     continue;
                 }
 
