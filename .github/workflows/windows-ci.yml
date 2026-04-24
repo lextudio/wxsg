@@ -28,9 +28,4 @@ jobs:
 
       - name: Run WPF Sample Regression Tests
         run: >
-          dotnet test tests/Wxsg.Tests/Wxsg.Tests.csproj
-          --nologo
-          -m:1
-          /nodeReuse:false
-          --disable-build-servers
-          --filter "FullyQualifiedName~WpfSampleRegressionTests"
+          dotnet run tests/Wxsg.Tests/Wxsg.Tests.csproj
