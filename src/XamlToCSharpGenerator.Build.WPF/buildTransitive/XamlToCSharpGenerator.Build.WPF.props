@@ -12,6 +12,13 @@
     <!-- Requested source language for WXSG output. -->
     <WpfXsgTargetLanguage Condition="'$(WpfXsgTargetLanguage)' == ''">CSharp</WpfXsgTargetLanguage>
 
+    <!--
+      Set WpfXsgEmitGeneratedFiles=true to write WXSG-generated .cs files to disk under
+      obj/{config}/{tfm}/generated/ so they can be inspected after compilation.
+      Equivalent to setting EmitCompilerGeneratedFiles=true but scoped to WXSG projects.
+    -->
+    <WpfXsgEmitGeneratedFiles Condition="'$(WpfXsgEmitGeneratedFiles)' == ''">false</WpfXsgEmitGeneratedFiles>
+
   </PropertyGroup>
 
 </Project>

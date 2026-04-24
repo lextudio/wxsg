@@ -2067,6 +2067,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     continue;
                 }
 
+                if (assignment.ValueKind == ResolvedValueKind.TemplateBinding)
+                {
+                    EmitFrameworkElementFactoryTemplateBindingAssignment(assignment, factoryVariable);
+                    continue;
+                }
+
                 var dependencyPropertyExpression = TryBuildDependencyPropertyExpression(
                     assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
                     assignment.ClrPropertyOwnerTypeName ??
@@ -2155,6 +2161,48 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             {
                 bindingCtor += " { " + string.Join(", ", initParts) + " }";
             }
+
+            Builder.AppendLine(
+                MemberIndent + "    " + factoryVariable + ".SetBinding(" + dependencyPropertyExpression + ", " + bindingCtor + ");");
+        }
+
+        private void EmitFrameworkElementFactoryTemplateBindingAssignment(
+            ResolvedPropertyAssignment assignment,
+            string factoryVariable)
+        {
+            if (!MarkupParser.TryParseMarkupExtension(assignment.ValueExpression, out var info))
+            {
+                return;
+            }
+
+            var dependencyPropertyExpression = TryBuildDependencyPropertyExpression(
+                assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
+                assignment.ClrPropertyOwnerTypeName,
+                assignment.PropertyName);
+            if (dependencyPropertyExpression is null)
+            {
+                return;
+            }
+
+            // {TemplateBinding PropertyName} — positional arg is the source property name
+            string? sourcePropName = null;
+            if (info.PositionalArguments.Length > 0)
+            {
+                sourcePropName = info.PositionalArguments[0];
+            }
+            else
+            {
+                info.NamedArguments.TryGetValue("Property", out sourcePropName);
+            }
+
+            var pathLiteral = string.IsNullOrEmpty(sourcePropName)
+                ? string.Empty
+                : "\"" + sourcePropName!.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+            var bindingCtor = string.IsNullOrEmpty(pathLiteral)
+                ? "new global::System.Windows.Data.Binding()"
+                : "new global::System.Windows.Data.Binding(" + pathLiteral + ")";
+            bindingCtor += " { RelativeSource = global::System.Windows.Data.RelativeSource.TemplatedParent }";
 
             Builder.AppendLine(
                 MemberIndent + "    " + factoryVariable + ".SetBinding(" + dependencyPropertyExpression + ", " + bindingCtor + ");");

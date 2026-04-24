@@ -1083,6 +1083,10 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                 // can parse it and emit a SetBinding call.
                 case XamlMarkupExtensionKind.Binding:
                     return (rawValue, ResolvedValueKind.Binding);
+                // Detect {TemplateBinding ...} — keep the raw XAML string so the emitter can emit
+                // a SetBinding call with RelativeSource.TemplatedParent.
+                case XamlMarkupExtensionKind.TemplateBinding:
+                    return (rawValue, ResolvedValueKind.TemplateBinding);
                 case XamlMarkupExtensionKind.Type:
                     if (TryConvertTypeMarkupExtension(markupInfo, context, out var typeExpression))
                     {

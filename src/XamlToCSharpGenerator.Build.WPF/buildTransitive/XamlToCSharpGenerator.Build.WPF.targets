@@ -26,6 +26,11 @@
     <LangVersion Condition="'$(LangVersion)' == '' or '$(LangVersion)' == '7' or '$(LangVersion)' == '7.0' or '$(LangVersion)' == '7.1' or '$(LangVersion)' == '7.2' or '$(LangVersion)' == '7.3' or '$(LangVersion)' == '8' or '$(LangVersion)' == '8.0'">9.0</LangVersion>
   </PropertyGroup>
 
+  <!-- Forward WpfXsgEmitGeneratedFiles to Roslyn's standard EmitCompilerGeneratedFiles. -->
+  <PropertyGroup Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgEmitGeneratedFiles)' == 'true'">
+    <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+  </PropertyGroup>
+
   <PropertyGroup>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'C#'">CSharp</WpfXsgTargetLanguageNormalized>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'CSharp'">CSharp</WpfXsgTargetLanguageNormalized>
