@@ -444,7 +444,7 @@ public class WpfSampleRegressionTests
             return LoadFromStream(stream);
         }
 
-        protected override Assembly? Load(AssemblyName assemblyName)
+        protected override Assembly Load(AssemblyName assemblyName)
         {
             var candidate = Path.Combine(_assemblyDirectory, assemblyName.Name + ".dll");
             if (!File.Exists(candidate))
