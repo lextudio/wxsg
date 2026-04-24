@@ -274,7 +274,7 @@ public class WpfSampleRegressionTests
     {
         var repositoryRoot = GetWxsgRepositoryRoot();
         var projectPath = Path.Combine(repositoryRoot, relativeProjectPath.Replace('/', Path.DirectorySeparatorChar));
-        var workspaceDirectory = CreateTemporaryDirectory(repositoryRoot, scenario);
+        var workspaceDirectory = CreateTemporaryDirectory(scenario);
         var generatedDirectory = Path.Combine(workspaceDirectory, "generated");
 
         try
@@ -368,11 +368,11 @@ public class WpfSampleRegressionTests
         return path.Replace('\\', '/');
     }
 
-    private static string CreateTemporaryDirectory(string repositoryRoot, string scenario)
+    private static string CreateTemporaryDirectory(string scenario)
     {
         var directory = Path.Combine(
-            repositoryRoot,
-            ".tmp-tests",
+            Path.GetTempPath(),
+            "wxsg-tests",
             scenario,
             Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
