@@ -9,6 +9,7 @@
     <UseWPF>true</UseWPF>
     <WpfXsgEnabled>true</WpfXsgEnabled>
     <WpfXsgCSharpMode>true</WpfXsgCSharpMode>
+    <WpfXsgEmitGeneratedFiles>true</WpfXsgEmitGeneratedFiles>
     <WpfXsgLanguageSupported>true</WpfXsgLanguageSupported>
     <XamlSourceGenEnabled>true</XamlSourceGenEnabled>
     <LangVersion>latest</LangVersion>

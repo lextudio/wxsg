@@ -1,0 +1,40 @@
+<Window x:Class="XStaticCustomNsSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:p="https://xxx.com/xaml"
+        Title="x:Static Custom NS Sample" Height="320" Width="520">
+    <Window.Resources>
+        <!-- nothing needed in resources; converter will be referenced via x:Static -->
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="10">
+            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <TextBox x:Name="FilterTextBox" Width="200" Margin="0,0,10,0" />
+            <CheckBox x:Name="ActiveOnlyCheckBox" Content="Active Only" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <ListBox Grid.Row="1" Margin="10" x:Name="ItemsList">
+            <ListBox.ItemsSource>
+                <MultiBinding Converter="{x:Static p:Converters.CollectionsToComposite}">
+                    <Binding Path="Items" />
+                    <Binding ElementName="FilterTextBox" Path="Text" />
+                    <Binding ElementName="ActiveOnlyCheckBox" Path="IsChecked" />
+                </MultiBinding>
+            </ListBox.ItemsSource>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Name}" Width="200" />
+                        <TextBlock Text="{Binding IsActive}" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</Window>

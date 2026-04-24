@@ -1067,6 +1067,10 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         string rawValue,
         BindingContext context)
     {
+        if (rawValue.Contains("x:Static"))
+        {
+            try { System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[ConvertAssignmentValue] rawValue={rawValue}\r\n"); } catch { }
+        }
         if (TryParseCsPrefixExpression(rawValue, out var csharpPrefixedExpression))
         {
             return (csharpPrefixedExpression, ResolvedValueKind.MarkupExtension);
@@ -1101,6 +1105,15 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
                     }
 
                     break;
+                case XamlMarkupExtensionKind.Static:
+                    // Try to qualify {x:Static p:ClassName.Member} with full namespace info
+                    // Try the full resolution method first
+                    if (TryBuildStaticMarkupExtensionQualified(markupInfo, context, out var qualifiedStaticExpr))
+                    {
+                        return (qualifiedStaticExpr, ResolvedValueKind.Literal);
+                    }
+                    // Fall through to keep as literal string for emitter's x:Static resolver.
+                    break;
                 case XamlMarkupExtensionKind.Unknown:
                     // For unknown markup extensions that carry a namespace prefix (e.g.
                     // {core:Localize Key}), resolve the prefix to its XML namespace URI and
@@ -1117,6 +1130,29 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             // For non-CSharp markup extensions, keep the source text as a literal.
             // The emitter can later lower known forms (x:Type/x:Static/DynamicResource/etc.).
             return (AsStringLiteral(rawValue), ResolvedValueKind.Literal);
+        }
+
+        // If markup parsing failed but it looks like x:Static with custom namespace, try to handle it
+        if (rawValue.Contains("{x:Static") && rawValue.Contains(":") && !rawValue.Contains("clr-namespace:"))
+        {
+            try
+            {
+                System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[Binder] Processing x:Static rawValue={rawValue}\r\n");
+                if (MarkupParser.TryParseMarkupExtension(rawValue, out var staticMarkupInfo))
+                {
+                    System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[Binder] Parsed markup extension\r\n");
+                    if (TryBuildStaticMarkupExtensionQualified(staticMarkupInfo, context, out var qualifiedExpr))
+                    {
+                        System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[Binder] Generated qualified: {qualifiedExpr}\r\n");
+                        return (qualifiedExpr, ResolvedValueKind.Literal);
+                    }
+                    System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[Binder] Failed to build qualified expression\r\n");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[Binder] Exception: {ex}\r\n");
+            }
         }
 
         if (TryParseInlineCSharpExpression(rawValue, context, out var fallbackCsharpExpression))
@@ -1606,6 +1642,184 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         }
 
         encoding = AsStringLiteral(sb.ToString());
+        return true;
+    }
+
+    private static bool TryBuildStaticMarkupExtensionQualified(
+        MarkupExtensionInfo markupInfo,
+        BindingContext context,
+        out string qualifiedExpr)
+    {
+        qualifiedExpr = string.Empty;
+
+        try
+        {
+            // Extract the positional argument: {x:Static p:Converters.CollectionsToComposite} -> "p:Converters.CollectionsToComposite"
+            if (markupInfo.PositionalArguments.Length == 0)
+            {
+                System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[TryBuildQualified] No positional arguments\r\n");
+                return false;
+            }
+
+            var memberToken = markupInfo.PositionalArguments[0];
+            System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[TryBuildQualified] memberToken={memberToken}\r\n");
+            if (string.IsNullOrWhiteSpace(memberToken))
+                return false;
+
+            // Parse the member token to extract prefix and type+member: "p:Converters.CollectionsToComposite" -> ("p", "Converters.CollectionsToComposite")
+            if (!XamlTokenSplitSemantics.TrySplitAtFirstSeparator(memberToken, ':', out var prefix, out var typeAndMember))
+            {
+                System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[TryBuildQualified] No prefix found in memberToken\r\n");
+                return false;
+            }
+            System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[TryBuildQualified] prefix={prefix}, typeAndMember={typeAndMember}\r\n");
+
+            // Look up the XML namespace for this prefix
+            if (!context.Document.XmlNamespaces.TryGetValue(prefix, out var xmlNamespace))
+            {
+                System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[TryBuildQualified] Prefix '{prefix}' not in XmlNamespaces\r\n");
+                return false;
+            }
+            System.IO.File.AppendAllText("C:\\temp\\wxsg-debug.log", $"[TryBuildQualified] Found xmlNamespace={xmlNamespace}\r\n");
+
+            // Try to resolve the CLR namespace and assembly from the XML namespace
+            string? clrNamespace = null;
+            string? assemblyName = null;
+
+            // Try direct clr-namespace: format first
+            if (XamlXmlNamespaceSemantics.TryExtractClrNamespaceReference(xmlNamespace, out var directClrNs, out var directAsmName))
+            {
+                clrNamespace = directClrNs;
+                assemblyName = directAsmName;
+            }
+            else
+            {
+                // Try XmlnsMap to resolve the namespace (this includes assembly XmlnsDefinition attributes)
+                var mappings = context.XmlnsMap.TryGetNamespaces(xmlNamespace, out var namespaceMappings) ? namespaceMappings : null;
+                if (mappings?.Any() == true)
+                {
+                    var firstMapping = mappings.First();
+                    clrNamespace = firstMapping.ClrNamespace;
+                    assemblyName = firstMapping.AssemblyName;
+                }
+            }
+
+            // If we couldn't resolve the namespace, fall back to using the XML namespace URI
+            // The emitter can later search assemblies with XmlnsDefinition attributes for this URI at runtime
+            if (string.IsNullOrWhiteSpace(clrNamespace))
+            {
+                // Encode the XML namespace URI so emitter can look it up at runtime
+                // Use "xmlns:" prefix to indicate this is an XML namespace lookup
+                clrNamespace = $"xmlns:{Uri.EscapeDataString(xmlNamespace)}";
+            }
+
+            // Parse type and member: "Converters.CollectionsToComposite" -> ("Converters", "CollectionsToComposite")
+            var lastDot = typeAndMember.LastIndexOf('.');
+            if (lastDot <= 0 || lastDot >= typeAndMember.Length - 1)
+                return false;
+
+            var typeName = typeAndMember.Substring(0, lastDot);
+            var memberName = typeAndMember.Substring(lastDot + 1);
+
+            // Build the fully-qualified XAML format: "{x:Static clr-namespace:namespace;assembly=assemblyName:Type.Member}"
+            // If clrNamespace starts with "xmlns:", the emitter knows to look up the XML namespace at runtime
+            var asmPart = !string.IsNullOrWhiteSpace(assemblyName) ? $";assembly={assemblyName}" : string.Empty;
+            qualifiedExpr = AsStringLiteral($"{{x:Static clr-namespace:{clrNamespace}{asmPart}:{typeName}.{memberName}}}");
+            return true;
+        }
+        catch
+        {
+            // If anything fails, just return false and let the fallback handle it
+            return false;
+        }
+    }
+
+    private static bool TryResolveStaticMarkupExtension(
+        MarkupExtensionInfo markupInfo,
+        BindingContext context,
+        out string resolvedExpr)
+    {
+        resolvedExpr = string.Empty;
+
+        // Extract the positional argument: {x:Static p:Converters.CollectionsToComposite} -> "p:Converters.CollectionsToComposite"
+        if (markupInfo.PositionalArguments.Length == 0)
+            return false;
+
+        var memberToken = markupInfo.PositionalArguments[0];
+        if (string.IsNullOrWhiteSpace(memberToken))
+            return false;
+
+        // Parse the member token to extract prefix and type+member: "p:Converters.CollectionsToComposite" -> ("p", "Converters.CollectionsToComposite")
+        if (!XamlTokenSplitSemantics.TrySplitAtFirstSeparator(memberToken, ':', out var prefix, out var typeAndMember))
+        {
+            // No prefix, use the member token as-is
+            typeAndMember = memberToken;
+            prefix = string.Empty;
+        }
+
+        // Resolve the XML namespace prefix to a list of CLR namespaces
+        string? xmlNamespace = null;
+        if (!string.IsNullOrWhiteSpace(prefix) && context.Document.XmlNamespaces.TryGetValue(prefix, out var prefixXmlNamespace))
+        {
+            xmlNamespace = prefixXmlNamespace;
+        }
+
+        // Parse type and member: "Converters.CollectionsToComposite" -> ("Converters", "CollectionsToComposite")
+        var lastDot = typeAndMember.LastIndexOf('.');
+        if (lastDot <= 0 || lastDot >= typeAndMember.Length - 1)
+            return false;
+
+        var typeName = typeAndMember.Substring(0, lastDot);
+        var memberName = typeAndMember.Substring(lastDot + 1);
+
+        // Resolve the type name using the namespace(s)
+        INamedTypeSymbol? resolvedType = null;
+
+        if (!string.IsNullOrWhiteSpace(xmlNamespace))
+        {
+            // Use the resolved XML namespace to find the type
+            resolvedType = ResolveTypeSymbol(xmlNamespace!, typeName, ImmutableArray<string>.Empty, context);
+        }
+        else if (!string.IsNullOrWhiteSpace(prefix))
+        {
+            // Prefix was present but not in XmlNamespaces (unexpected), fall back to unqualified lookup
+            // Try to resolve by searching all loaded types (fallback path)
+        }
+        else
+        {
+            // No prefix, try to resolve in known WPF namespaces
+            var knownNamespaces = new[] {
+                "System.Windows",
+                "System.Windows.Automation",
+                "System.Windows.Controls",
+                "System.Windows.Controls.Primitives",
+                "System.Windows.Documents",
+                "System.Windows.Input",
+                "System.Windows.Media",
+                "System.Windows.Media.Animation",
+                "System.Windows.Navigation",
+                "System.Windows.Shapes"
+            };
+
+            foreach (var ns in knownNamespaces)
+            {
+                resolvedType = ResolveTypeSymbol(ns, typeName, ImmutableArray<string>.Empty, context);
+                if (resolvedType is not null)
+                    break;
+            }
+        }
+
+        if (resolvedType is null)
+            return false;
+
+        // Build the fully-qualified XAML namespace reference: "x:Static clr-namespace:XStaticCustomNsSample;assembly=XStaticCustomNsSample:Converters.CollectionsToComposite"
+        // This format can be resolved later by the emitter's __WXSG_ResolveXStatic without needing runtime XmlnsDefinition lookup
+        var assemblyName = resolvedType.ContainingAssembly?.Name ?? string.Empty;
+        var namespaceName = resolvedType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+
+        // Format as {x:Static clr-namespace:namespace;assembly=assemblyName:TypeName.MemberName}
+        // The emitter will parse this as: extract namespace from before ';', extract member from after final ':'
+        resolvedExpr = AsStringLiteral($"{{x:Static clr-namespace:{namespaceName};assembly={assemblyName}:{resolvedType.Name}.{memberName}}}");
         return true;
     }
 }
