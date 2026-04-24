@@ -27,4 +27,4 @@ jobs:
         run: New-Item -ItemType Directory -Force -Path artifacts/local-packages | Out-Null
 
       - name: Run WPF Sample Regression Tests
-        run: dotnet test tests/Wxsg.Tests/Wxsg.Tests.csproj --verbosity normal
+        run: cd .\tests\Wxsg.Tests\ && dotnet run
