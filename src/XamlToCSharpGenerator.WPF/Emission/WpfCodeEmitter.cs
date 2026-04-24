@@ -81,6 +81,30 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(classDeclaration);
         sb.AppendLine(indent + "{");
 
+        // If the XAML root is a derived control (root element type != generated class),
+        // emit a static ctor that overrides DefaultStyleKey metadata so the derived
+        // control automatically picks up the base control's style (no manual ApplyTemplate).
+        var rootTypeName = viewModel.RootObject.TypeName;
+        if (!IsApplicationDefinition(viewModel) && !string.IsNullOrWhiteSpace(rootTypeName) && !string.IsNullOrWhiteSpace(doc.ClassFullName))
+        {
+            var normalizedRoot = rootTypeName.Replace("global::", string.Empty);
+            // Emit override only for non-system control roots where the XAML root isn't the generated class itself.
+            if (!normalizedRoot.StartsWith("System.", StringComparison.Ordinal) &&
+                !normalizedRoot.StartsWith("Microsoft.", StringComparison.Ordinal) &&
+                !string.Equals(normalizedRoot, doc.ClassFullName, StringComparison.Ordinal))
+            {
+                sb.AppendLine();
+                sb.AppendLine(emitter.MemberIndent + "static " + className + "()");
+                sb.AppendLine(emitter.MemberIndent + "{");
+                sb.AppendLine(emitter.MemberIndent + "    DefaultStyleKeyProperty.OverrideMetadata(");
+                sb.AppendLine(emitter.MemberIndent + "        typeof(" + QualifyType(doc.ClassFullName) + "),");
+                sb.AppendLine(emitter.MemberIndent + "        new global::System.Windows.FrameworkPropertyMetadata(typeof(" + QualifyType(rootTypeName) + "))");
+                sb.AppendLine(emitter.MemberIndent + "    );");
+                sb.AppendLine(emitter.MemberIndent + "}");
+                sb.AppendLine();
+            }
+        }
+
         foreach (var element in viewModel.NamedElements)
         {
             sb.AppendLine(emitter.MemberIndent + "#line " + element.Line.ToString(CultureInfo.InvariantCulture));
@@ -134,6 +158,36 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i);
         sb.AppendLine(i + "    // Phase 3: pure C# object-graph construction (no BAML LoadComponent).");
         sb.AppendLine(i + "    __WXSG_BuildObjectGraph();");
+
+        // Runtime fallback: if this XAML-root subclass did not pick up a template via DefaultStyleKey,
+        // attempt to find the base control's style at runtime and apply it so templates render
+        // even when the implicit theme lookup doesn't resolve automatically.
+        var rootType = viewModel.RootObject.TypeName;
+        var docClassFullName = viewModel.Document.ClassFullName;
+        if (!string.IsNullOrWhiteSpace(rootType) && !string.IsNullOrWhiteSpace(docClassFullName))
+        {
+            var normalizedRoot = rootType.Replace("global::", string.Empty);
+            var normalizedClass = docClassFullName.Replace("global::", string.Empty);
+            if (!string.Equals(normalizedRoot, normalizedClass, StringComparison.Ordinal) &&
+                !normalizedRoot.StartsWith("System.", StringComparison.Ordinal) &&
+                !normalizedRoot.StartsWith("Microsoft.", StringComparison.Ordinal))
+            {
+                sb.AppendLine(i + "    try");
+                sb.AppendLine(i + "    {");
+                sb.AppendLine(i + "        var __thisAsControl = this as global::System.Windows.Controls.Control;");
+                sb.AppendLine(i + "        if (__thisAsControl != null && __thisAsControl.Template == null)");
+                sb.AppendLine(i + "        {");
+                sb.AppendLine(i + "            var __fallbackStyle = __thisAsControl.TryFindResource(typeof(" + QualifyType(rootType) + ")) as global::System.Windows.Style;");
+                sb.AppendLine(i + "            if (__fallbackStyle != null)");
+                sb.AppendLine(i + "            {");
+                sb.AppendLine(i + "                __thisAsControl.Style = __fallbackStyle;");
+                sb.AppendLine(i + "                __thisAsControl.ApplyTemplate();");
+                sb.AppendLine(i + "            }");
+                sb.AppendLine(i + "        }");
+                sb.AppendLine(i + "    }");
+                sb.AppendLine(i + "    catch { }");
+            }
+        }
         sb.AppendLine(i + "}");
         sb.AppendLine();
 
@@ -147,9 +201,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         }
         sb.AppendLine(i + "    var __previousRootResourceScope = __WXSG_CurrentRootResourceScope;");
         sb.AppendLine(i + "    __WXSG_CurrentRootResourceScope = __root;");
+        sb.AppendLine(i + "    var __rootInit = __root as global::System.ComponentModel.ISupportInitialize;");
+        sb.AppendLine(i + "    __rootInit?.BeginInit();");
         sb.AppendLine(i + "    try");
         sb.AppendLine(i + "    {");
         emitter.EmitNodeInitialization(viewModel.RootObject, "__root", isRootNode: true, ambientStyleTargetTypeExpression: null);
+        sb.AppendLine(i + "        __rootInit?.EndInit();");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "    finally");
         sb.AppendLine(i + "    {");

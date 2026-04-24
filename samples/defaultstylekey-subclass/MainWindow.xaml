@@ -1,0 +1,22 @@
+<Window x:Class="DefaultStyleKeySubclassSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DefaultStyleKeySubclassSample"
+        Title="DefaultStyleKey Subclass Test"
+        Width="420" Height="260">
+    <StackPanel Margin="16" VerticalAlignment="Top">
+
+        <TextBlock FontWeight="Bold" Text="1. Static CustomTextBox in XAML (should be orange-bordered):" />
+        <local:CustomTextBox x:Name="staticBox" Width="360" Margin="0,4,0,12"
+                             Text="I am a CustomTextBox defined in XAML" />
+
+        <TextBlock FontWeight="Bold" Text="2. Dynamic SubTextBox placed in ContentPresenter (should also be orange-bordered):" />
+        <ContentPresenter x:Name="dynamicHost" Width="360" HorizontalAlignment="Left" Margin="0,4,0,12" />
+
+        <StackPanel Orientation="Horizontal">
+            <Button Content="Add SubTextBox" Width="140" Click="AddSubTextBox_Click" />
+            <TextBlock x:Name="statusText" Margin="12,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+
+    </StackPanel>
+</Window>
