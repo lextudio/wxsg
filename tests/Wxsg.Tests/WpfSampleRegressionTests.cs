@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.Loader;
 using System.Text;
 
 namespace Wxsg.Tests;
@@ -174,7 +175,7 @@ public class WpfSampleRegressionTests
             "netstandard2.0",
             "XamlToCSharpGenerator.WPF.dll");
 
-        var generatorAssembly = Assembly.LoadFrom(generatorAssemblyPath);
+        var generatorAssembly = LoadAssemblyWithoutLocking(generatorAssemblyPath);
         var emitterType = generatorAssembly.GetType(
             "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter",
             throwOnError: true);
@@ -260,7 +261,13 @@ public class WpfSampleRegressionTests
             "netstandard2.0",
             "XamlToCSharpGenerator.WPF.dll");
 
-        return Assembly.LoadFrom(generatorAssemblyPath);
+        return LoadAssemblyWithoutLocking(generatorAssemblyPath);
+    }
+
+    private static Assembly LoadAssemblyWithoutLocking(string assemblyPath)
+    {
+        var loadContext = new ByteArrayAssemblyLoadContext(Path.GetDirectoryName(assemblyPath)!);
+        return loadContext.LoadFromAssemblyPathWithoutLocking(assemblyPath);
     }
 
     private static SampleBuildArtifact BuildSample(string relativeProjectPath, string scenario)
@@ -418,6 +425,40 @@ public class WpfSampleRegressionTests
         public void Dispose()
         {
             TryDeleteDirectory(WorkspaceDirectory);
+        }
+    }
+
+    private sealed class ByteArrayAssemblyLoadContext : AssemblyLoadContext
+    {
+        private readonly string _assemblyDirectory;
+
+        public ByteArrayAssemblyLoadContext(string assemblyDirectory)
+            : base(isCollectible: true)
+        {
+            _assemblyDirectory = assemblyDirectory;
+        }
+
+        public Assembly LoadFromAssemblyPathWithoutLocking(string assemblyPath)
+        {
+            using var stream = OpenReadWithoutLocking(assemblyPath);
+            return LoadFromStream(stream);
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            var candidate = Path.Combine(_assemblyDirectory, assemblyName.Name + ".dll");
+            if (!File.Exists(candidate))
+            {
+                return null;
+            }
+
+            using var stream = OpenReadWithoutLocking(candidate);
+            return LoadFromStream(stream);
+        }
+
+        private static MemoryStream OpenReadWithoutLocking(string assemblyPath)
+        {
+            return new MemoryStream(File.ReadAllBytes(assemblyPath), writable: false);
         }
     }
 }
