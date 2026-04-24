@@ -94,6 +94,25 @@ public class WpfSampleRegressionTests
     }
 
     [Fact]
+    public void Template_NameScope_Sample_Does_Not_Register_Template_Names_On_Root()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/templatenamescope/TemplateNameScopeSample.csproj",
+            "wpf-sample-template-namescope");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.DoesNotContain("this.RegisterName(\"thumb\"", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(" this.thumb;", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("TargetName = \"thumb\"", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
     {
         var repositoryRoot = GetWxsgRepositoryRoot();
