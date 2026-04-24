@@ -1,0 +1,15 @@
+<Window x:Class="EventSetterLoadedSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="EventSetter Loaded Sample" Height="200" Width="400">
+
+    <Window.Style>
+        <Style TargetType="{x:Type Window}">
+            <EventSetter Event="Loaded" Handler="OnLoaded" />
+        </Style>
+    </Window.Style>
+
+    <Grid>
+        <TextBlock HorizontalAlignment="Center" VerticalAlignment="Center">EventSetter Loaded repro</TextBlock>
+    </Grid>
+</Window>

@@ -409,6 +409,31 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve dependency property token '\" + __token + \"'.\");");
         sb.AppendLine(i + "}");
         sb.AppendLine();
+        sb.AppendLine(i + "private static global::System.Windows.RoutedEvent __WXSG_ResolveRoutedEvent(global::System.Type __styleTargetType, string __eventName)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    var __fieldName = __eventName + \"Event\";");
+        sb.AppendLine(i + "    for (var __type = __styleTargetType; __type is not null; __type = __type.BaseType)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __field = __type.GetField(__fieldName, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+        sb.AppendLine(i + "        if (__field?.GetValue(null) is global::System.Windows.RoutedEvent __re)");
+        sb.AppendLine(i + "            return __re;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    foreach (var __assembly in global::System.AppDomain.CurrentDomain.GetAssemblies())");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        global::System.Type[] __types;");
+        sb.AppendLine(i + "        try { __types = __assembly.GetTypes(); }");
+        sb.AppendLine(i + "        catch (global::System.Reflection.ReflectionTypeLoadException __rtl) { __types = __rtl.Types; }");
+        sb.AppendLine(i + "        foreach (var __candidateType in __types)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            if (__candidateType is null) continue;");
+        sb.AppendLine(i + "            var __candidateField = __candidateType.GetField(__fieldName, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+        sb.AppendLine(i + "            if (__candidateField?.GetValue(null) is global::System.Windows.RoutedEvent __re)");
+        sb.AppendLine(i + "                return __re;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve routed event '\" + __eventName + \"'.\");");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
         sb.AppendLine(i + "[global::System.ThreadStatic]");
         sb.AppendLine(i + "private static object __WXSG_CurrentRootResourceScope;");
         sb.AppendLine();
@@ -1431,6 +1456,35 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                             "if (__dynResVal is " + dynResTypeName + " __dynResCast) " +
                             instanceVariable + "." + assignment.PropertyName + " = __dynResCast; }");
                     }
+                    continue;
+                }
+
+                // EventSetter.Event: resolve the routed event by name from the style's target type hierarchy
+                var isEventSetter = node.TypeName.Replace("global::", string.Empty).Equals("System.Windows.EventSetter", StringComparison.Ordinal)
+                    || node.TypeName.Equals("EventSetter", StringComparison.Ordinal);
+                if (isEventSetter &&
+                    string.Equals(assignment.PropertyName, "Event", StringComparison.Ordinal) &&
+                    TryUnquote(assignment.ValueExpression, out var eventNameLiteral))
+                {
+                    var targetTypeExpr = ambientStyleTargetTypeExpression ?? "typeof(global::System.Windows.FrameworkElement)";
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        instanceVariable + ".Event = __WXSG_ResolveRoutedEvent(" + targetTypeExpr + ", " +
+                        EscapeStringLiteral(eventNameLiteral.Trim()) + ");");
+                    continue;
+                }
+
+                // EventSetter.Handler: create a delegate bound to this instance using the event's HandlerType
+                if (isEventSetter &&
+                    string.Equals(assignment.PropertyName, "Handler", StringComparison.Ordinal) &&
+                    TryUnquote(assignment.ValueExpression, out var handlerNameLiteral))
+                {
+                    var handlerFlags = "global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic";
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        instanceVariable + ".Handler = global::System.Delegate.CreateDelegate(" +
+                        instanceVariable + ".Event.HandlerType, this, " +
+                        "this.GetType().GetMethod(" + EscapeStringLiteral(handlerNameLiteral.Trim()) + ", " + handlerFlags + "));");
                     continue;
                 }
 
