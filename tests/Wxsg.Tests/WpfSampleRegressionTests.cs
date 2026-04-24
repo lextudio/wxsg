@@ -196,11 +196,11 @@ public class WpfSampleRegressionTests
             "XamlToCSharpGenerator.WPF.dll");
 
         var generatorAssembly = LoadAssemblyWithoutLocking(generatorAssemblyPath);
-        var emitterType = generatorAssembly.GetType(
-            "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter",
+        var utilitiesType = generatorAssembly.GetType(
+            "XamlToCSharpGenerator.WPF.Emission.CodeGenUtilities",
             throwOnError: true);
 
-        var method = emitterType!.GetMethod(
+        var method = utilitiesType!.GetMethod(
             "ConvertLiteralExpression",
             BindingFlags.NonPublic | BindingFlags.Static);
 
@@ -218,7 +218,7 @@ public class WpfSampleRegressionTests
     {
         var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
         var graphEmitterType = generatorAssembly.GetType(
-            "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter+GraphEmitter",
+            "XamlToCSharpGenerator.WPF.Emission.GraphEmitter",
             throwOnError: true);
 
         var method = graphEmitterType!.GetMethod(
@@ -239,7 +239,7 @@ public class WpfSampleRegressionTests
     {
         var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
         var graphEmitterType = generatorAssembly.GetType(
-            "XamlToCSharpGenerator.WPF.Emission.WpfCodeEmitter+GraphEmitter",
+            "XamlToCSharpGenerator.WPF.Emission.GraphEmitter",
             throwOnError: true);
 
         var method = graphEmitterType!.GetMethod(
