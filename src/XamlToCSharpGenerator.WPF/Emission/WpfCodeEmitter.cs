@@ -1271,6 +1271,13 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     continue;
                 }
 
+                // {TemplateBinding ...} — emit a SetBinding call with RelativeSource.TemplatedParent.
+                if (assignment.ValueKind == ResolvedValueKind.TemplateBinding)
+                {
+                    EmitSetTemplateBinding(node.TypeName, assignment, instanceVariable);
+                    continue;
+                }
+
                 // {DynamicResource key} — emit SetResourceReference for the root object (always a
                 // FrameworkElement/FrameworkContentElement), or a static TryFindResource lookup for
                 // non-root objects like GradientStop that may not have SetResourceReference.
@@ -1477,6 +1484,32 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
             // DependencyProperty field: WPF convention is OwnerType.PropertyNameProperty.
             // For attached properties the framework owner type is stored in FrameworkPayload.
+            var ownerTypeName = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId)
+                                ?? assignment.ClrPropertyOwnerTypeName;
+            var dpField = QualifyType(ownerTypeName) + "." + assignment.PropertyName + "Property";
+
+            Builder.AppendLine(MemberIndent + "    global::System.Windows.Data.BindingOperations.SetBinding(" +
+                               instanceVariable + ", " + dpField + ", " + bindingExpr + ");");
+        }
+
+        private void EmitSetTemplateBinding(string? instanceTypeName, ResolvedPropertyAssignment assignment, string instanceVariable)
+        {
+            if (!MarkupParser.TryParseMarkupExtension(assignment.ValueExpression, out var info))
+                return;
+
+            string? sourcePropName = null;
+            if (info.PositionalArguments.Length > 0)
+                sourcePropName = info.PositionalArguments[0];
+            else
+                info.NamedArguments.TryGetValue("Property", out sourcePropName);
+
+            var pathLiteral = string.IsNullOrEmpty(sourcePropName)
+                ? string.Empty
+                : "\"" + sourcePropName!.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+
+            var bindingExpr = "new global::System.Windows.Data.Binding(" + pathLiteral + ")" +
+                              " { RelativeSource = global::System.Windows.Data.RelativeSource.TemplatedParent }";
+
             var ownerTypeName = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId)
                                 ?? assignment.ClrPropertyOwnerTypeName;
             var dpField = QualifyType(ownerTypeName) + "." + assignment.PropertyName + "Property";
