@@ -26,5 +26,8 @@ jobs:
       - name: Prepare Local Package Feed
         run: New-Item -ItemType Directory -Force -Path artifacts/local-packages | Out-Null
 
+      - name: Restore
+        run: cd .\src && dotnet restore
+
       - name: Run WPF Sample Regression Tests
         run: cd .\tests\Wxsg.Tests\ && dotnet run
