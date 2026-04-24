@@ -379,6 +379,33 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "        }");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i);
+        sb.AppendLine(i + "    foreach (var __assembly in global::System.AppDomain.CurrentDomain.GetAssemblies())");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        global::System.Type[] __types;");
+        sb.AppendLine(i + "        try");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __types = __assembly.GetTypes();");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "        catch (global::System.Reflection.ReflectionTypeLoadException __rtl)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __types = __rtl.Types;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "        foreach (var __candidateType in __types)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            if (__candidateType is null)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                continue;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i);
+        sb.AppendLine(i + "            var __candidateField = __candidateType.GetField(__fieldName, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+        sb.AppendLine(i + "            if (__candidateField?.GetValue(null) is global::System.Windows.DependencyProperty __candidateDp)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                return __candidateDp;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i);
         sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve dependency property token '\" + __token + \"'.\");");
         sb.AppendLine(i + "}");
         sb.AppendLine();
@@ -1276,6 +1303,18 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                             "if (__dynResVal is " + dynResTypeName + " __dynResCast) " +
                             instanceVariable + "." + assignment.PropertyName + " = __dynResCast; }");
                     }
+                    continue;
+                }
+
+                if (string.Equals(assignment.PropertyName, "Property", StringComparison.Ordinal) &&
+                    (string.Equals(assignment.ClrPropertyTypeName?.Replace("global::", string.Empty), "System.Windows.DependencyProperty", StringComparison.Ordinal) ||
+                     string.Equals(assignment.ClrPropertyTypeName, "DependencyProperty", StringComparison.Ordinal)))
+                {
+                    var targetTypeExpression = ambientStyleTargetTypeExpression ?? "typeof(global::System.Windows.FrameworkElement)";
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        instanceVariable + "." + assignment.PropertyName + " = " +
+                        "__WXSG_ResolveSetterDependencyProperty(" + assignment.ValueExpression + ", " + targetTypeExpression + ");");
                     continue;
                 }
 
