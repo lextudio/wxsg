@@ -1215,7 +1215,8 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             ResolvedObjectNode node,
             string instanceVariable,
             bool isRootNode,
-            string? ambientStyleTargetTypeExpression)
+            string? ambientStyleTargetTypeExpression,
+            bool suppressNamedFieldRegistration = false)
         {
             var nextAmbientStyleTargetTypeExpression = ambientStyleTargetTypeExpression;
             if (string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Style", StringComparison.Ordinal))
@@ -1223,21 +1224,25 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 nextAmbientStyleTargetTypeExpression = instanceVariable + ".TargetType";
             }
 
-            EmitNamedFieldAssignment(node, instanceVariable);
+            var nextSuppressNamedFieldRegistration = suppressNamedFieldRegistration || CreatesNestedNameScope(node);
+
+            EmitNamedFieldAssignment(node, instanceVariable, suppressNamedFieldRegistration);
             EmitPropertyAssignments(node, instanceVariable, nextAmbientStyleTargetTypeExpression);
-            EmitPropertyElementAssignments(node, instanceVariable);
+            EmitPropertyElementAssignments(node, instanceVariable, nextSuppressNamedFieldRegistration);
             EmitEventSubscriptions(node, instanceVariable);
-            EmitChildNodes(node, instanceVariable, nextAmbientStyleTargetTypeExpression);
+            EmitChildNodes(node, instanceVariable, nextAmbientStyleTargetTypeExpression, nextSuppressNamedFieldRegistration);
 
             if (isRootNode && !string.IsNullOrWhiteSpace(node.Name))
             {
-                EmitNamedFieldAssignment(node, instanceVariable);
+                EmitNamedFieldAssignment(node, instanceVariable, suppressNamedFieldRegistration);
             }
         }
 
-        private void EmitNamedFieldAssignment(ResolvedObjectNode node, string instanceVariable)
+        private void EmitNamedFieldAssignment(ResolvedObjectNode node, string instanceVariable, bool suppressNamedFieldRegistration)
         {
-            if (string.IsNullOrWhiteSpace(node.Name) || !_namedFieldTypes.TryGetValue(node.Name, out var fieldType))
+            if (suppressNamedFieldRegistration ||
+                string.IsNullOrWhiteSpace(node.Name) ||
+                !_namedFieldTypes.TryGetValue(node.Name, out var fieldType))
             {
                 return;
             }
@@ -1666,7 +1671,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             }
         }
 
-        private void EmitPropertyElementAssignments(ResolvedObjectNode node, string instanceVariable)
+        private void EmitPropertyElementAssignments(
+            ResolvedObjectNode node,
+            string instanceVariable,
+            bool suppressNamedFieldRegistration)
         {
             foreach (var propertyElement in node.PropertyElementAssignments)
             {
@@ -1678,7 +1686,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 var createdValues = new List<string>(propertyElement.ObjectValues.Length);
                 foreach (var objectValue in propertyElement.ObjectValues)
                 {
-                    createdValues.Add(EmitChildObjectCreation(objectValue, ambientStyleTargetTypeExpression: null));
+                    createdValues.Add(EmitChildObjectCreation(
+                        objectValue,
+                        ambientStyleTargetTypeExpression: null,
+                        suppressNamedFieldRegistration));
                 }
 
                 var frameworkOwner = propertyElement.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId);
@@ -1863,7 +1874,8 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         private void EmitChildNodes(
             ResolvedObjectNode node,
             string instanceVariable,
-            string? ambientStyleTargetTypeExpression)
+            string? ambientStyleTargetTypeExpression,
+            bool suppressNamedFieldRegistration)
         {
             if (node.Children.IsDefaultOrEmpty)
             {
@@ -1872,12 +1884,18 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
             foreach (var child in node.Children)
             {
-                var childVariable = EmitChildObjectCreation(child, ambientStyleTargetTypeExpression);
+                var childVariable = EmitChildObjectCreation(
+                    child,
+                    ambientStyleTargetTypeExpression,
+                    suppressNamedFieldRegistration);
                 AttachChild(node, instanceVariable, child, childVariable);
             }
         }
 
-        private string EmitChildObjectCreation(ResolvedObjectNode child, string? ambientStyleTargetTypeExpression)
+        private string EmitChildObjectCreation(
+            ResolvedObjectNode child,
+            string? ambientStyleTargetTypeExpression,
+            bool suppressNamedFieldRegistration)
         {
             var localVariable = "__node" + _localCounter.ToString(CultureInfo.InvariantCulture);
             _localCounter++;
@@ -1887,7 +1905,10 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 var arrayItems = new List<string>(child.Children.Length);
                 foreach (var arrayChild in child.Children)
                 {
-                    arrayItems.Add(EmitChildObjectCreation(arrayChild, ambientStyleTargetTypeExpression));
+                    arrayItems.Add(EmitChildObjectCreation(
+                        arrayChild,
+                        ambientStyleTargetTypeExpression,
+                        suppressNamedFieldRegistration));
                 }
 
                 var elementTypeName = string.IsNullOrWhiteSpace(child.ContentPropertyTypeName)
@@ -1905,8 +1926,26 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 : "new " + QualifyType(child.TypeName) + "()";
 
             Builder.AppendLine(MemberIndent + "    var " + localVariable + " = " + creationExpression + ";");
-            EmitNodeInitialization(child, localVariable, isRootNode: false, ambientStyleTargetTypeExpression);
+            EmitNodeInitialization(
+                child,
+                localVariable,
+                isRootNode: false,
+                ambientStyleTargetTypeExpression,
+                suppressNamedFieldRegistration);
             return localVariable;
+        }
+
+        private static bool CreatesNestedNameScope(ResolvedObjectNode node)
+        {
+            var typeName = node.TypeName.Replace("global::", string.Empty);
+            return typeName switch
+            {
+                "System.Windows.DataTemplate" => true,
+                "System.Windows.HierarchicalDataTemplate" => true,
+                "System.Windows.Controls.ControlTemplate" => true,
+                "System.Windows.Controls.ItemsPanelTemplate" => true,
+                _ => false
+            };
         }
 
         private void AttachChild(
