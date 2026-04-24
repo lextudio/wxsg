@@ -1,0 +1,8 @@
+<Project>
+  <PropertyGroup>
+    <!-- Disable Roslyn/style analyzers for wxsg subtree to avoid StyleCop errors during local builds -->
+    <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild>
+    <RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+    <EnableNETAnalyzers>false</EnableNETAnalyzers>
+  </PropertyGroup>
+</Project>

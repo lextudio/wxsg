@@ -44,8 +44,12 @@ internal sealed class GraphEmitter
         bool suppressNamedFieldRegistration = false)
     {
         var nextAmbientStyleTargetTypeExpression = ambientStyleTargetTypeExpression;
-        if (string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Style", StringComparison.Ordinal))
+        var nodeTypeNoGlobal = node.TypeName.Replace("global::", string.Empty).Trim();
+        var nodeSimpleName = nodeTypeNoGlobal.Contains('.') ? nodeTypeNoGlobal.Substring(nodeTypeNoGlobal.LastIndexOf('.') + 1) : nodeTypeNoGlobal;
+        if (string.Equals(nodeSimpleName, "Style", StringComparison.Ordinal) ||
+            string.Equals(nodeTypeNoGlobal, "System.Windows.Style", StringComparison.Ordinal))
         {
+            try { System.Console.WriteLine("[WXSG] EmitNodeInitialization detected style: node.TypeName='" + node.TypeName + "' simple='" + nodeSimpleName + "' instanceVar='" + instanceVariable + "'"); } catch { }
             nextAmbientStyleTargetTypeExpression = instanceVariable + ".TargetType";
         }
 
@@ -53,7 +57,7 @@ internal sealed class GraphEmitter
 
         EmitNamedFieldAssignment(node, instanceVariable, suppressNamedFieldRegistration);
         EmitPropertyAssignments(node, instanceVariable, nextAmbientStyleTargetTypeExpression);
-        EmitPropertyElementAssignments(node, instanceVariable, nextSuppressNamedFieldRegistration);
+        EmitPropertyElementAssignments(node, nextAmbientStyleTargetTypeExpression, instanceVariable, nextSuppressNamedFieldRegistration);
         EmitEventSubscriptions(node, instanceVariable);
         EmitChildNodes(node, instanceVariable, nextAmbientStyleTargetTypeExpression, nextSuppressNamedFieldRegistration);
 
@@ -268,10 +272,28 @@ internal sealed class GraphEmitter
                     assignment.ValueExpression,
                     assignment.ClrPropertyTypeName,
                     instanceVariable);
+                var convTarget = string.IsNullOrWhiteSpace(ambientStyleTargetTypeExpression) ? "null" : ambientStyleTargetTypeExpression;
                 Builder.AppendLine(
                     MemberIndent + "    " +
                     instanceVariable + "." + assignment.PropertyName + " = " +
-                    "__WXSG_ConvertSetterValue(" + instanceVariable + ".Property, " + convertedSetterValue + ");");
+                    "__WXSG_ConvertSetterValue(" + instanceVariable + ".Property, " + convTarget + ", " + convertedSetterValue + ");");
+                continue;
+            }
+
+            // Trigger.Value should be converted using the resolved DependencyProperty's type
+            // so enum/string values like "SubmenuHeader" are converted to the proper enum.
+            if (string.Equals(node.TypeName.Replace("global::", string.Empty), "System.Windows.Trigger", StringComparison.Ordinal) &&
+                string.Equals(assignment.PropertyName, "Value", StringComparison.Ordinal))
+            {
+                var convertedTriggerValue = CodeGenUtilities.ConvertLiteralExpression(
+                    assignment.ValueExpression,
+                    assignment.ClrPropertyTypeName,
+                    instanceVariable);
+                var convTarget2 = string.IsNullOrWhiteSpace(ambientStyleTargetTypeExpression) ? "null" : ambientStyleTargetTypeExpression;
+                Builder.AppendLine(
+                    MemberIndent + "    " +
+                    instanceVariable + "." + assignment.PropertyName + " = " +
+                    "__WXSG_ConvertSetterValue(" + instanceVariable + ".Property, " + convTarget2 + ", " + convertedTriggerValue + ");");
                 continue;
             }
 
@@ -624,6 +646,7 @@ internal sealed class GraphEmitter
 
     private void EmitPropertyElementAssignments(
         ResolvedObjectNode node,
+        string? ambientStyleTargetTypeExpression,
         string instanceVariable,
         bool suppressNamedFieldRegistration)
     {
@@ -639,7 +662,7 @@ internal sealed class GraphEmitter
             {
                 createdValues.Add(EmitChildObjectCreation(
                     objectValue,
-                    ambientStyleTargetTypeExpression: null,
+                    ambientStyleTargetTypeExpression,
                     suppressNamedFieldRegistration));
             }
 

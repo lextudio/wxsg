@@ -321,6 +321,19 @@ internal static class CodeGenUtilities
             return ConvertLiteralExpression(valueExpression, innerType);
         }
 
+        // ImageSource with a relative pack URI like "/Assembly;component/Path" or
+        // "Assembly;component/Path": ConvertFromInvariantString cannot resolve these
+        // without a base URI context.  Emit a BitmapImage with an absolute pack URI.
+        if (normalizedType is "System.Windows.Media.ImageSource" or "Windows.Media.ImageSource" or "ImageSource")
+        {
+            var uriCandidate = literalValue.TrimStart('/');
+            if (uriCandidate.IndexOf(";component/", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                var absUri = "pack://application:,,," + (literalValue.StartsWith("/", StringComparison.Ordinal) ? literalValue : "/" + literalValue);
+                return "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(" + EscapeStringLiteral(absUri) + ", global::System.UriKind.Absolute))";
+            }
+        }
+
         return ConvertViaTypeConverter(normalizedType, valueExpression);
     }
 

@@ -105,9 +105,35 @@
     only once.  BeforeTargets runs the target before whichever listed target executes
     first; MSBuild skips subsequent attempts after the first run.
   -->
+  <!--
+    Belt-and-suspenders LangVersion guard: set LangVersion >= 9.0 inside a target so it
+    runs AFTER all property evaluation (including the SDK's implicit Sdk.targets, which can
+    cap .NETFramework projects at C# 7.3 even after the PropertyGroup above set it to 9.0).
+  -->
+  <Target Name="_WxsgEnsureLangVersion9"
+          BeforeTargets="CoreCompile"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'C#'">
+    <PropertyGroup>
+      <LangVersion Condition="'$(LangVersion)' == '' or '$(LangVersion)' == '7' or '$(LangVersion)' == '7.0' or '$(LangVersion)' == '7.1' or '$(LangVersion)' == '7.2' or '$(LangVersion)' == '7.3' or '$(LangVersion)' == '8' or '$(LangVersion)' == '8.0'">9.0</LangVersion>
+    </PropertyGroup>
+  </Target>
+
   <Target Name="_WxsgPrepareXamlCSharp"
           BeforeTargets="MarkupCompilePass1;GenerateMSBuildEditorConfigFileShouldRun"
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+
+    <!--
+      Remove stale BAML files that MarkupCompilePass1 produced in a prior non-WXSG build.
+      Without this step, enabling WXSG on a project that was previously built without it can
+      leave BAML artifacts on disk. Those BAML files would still be embedded into the assembly
+      (picked up as Resource items by WPF's build machinery), and Application.GetResourceStream
+      would return BAML binary instead of raw XAML, crashing at runtime with an XML parse error.
+    -->
+    <Delete Files="@(Page -> '$(IntermediateOutputPath)%(RelativeDir)%(Filename).baml')"
+            ContinueOnError="true" />
+    <Delete Files="@(ApplicationDefinition -> '$(IntermediateOutputPath)%(RelativeDir)%(Filename).baml')"
+            ContinueOnError="true" />
+
     <ItemGroup>
       <!--
         Split Page items into classed (x:Class present) and classless (ResourceDictionaries).
@@ -177,9 +203,32 @@
         Embed all XAML files as Resource items so pack://application:,,,/ URIs resolve at
         runtime. Classed XAML is needed for Application.LoadComponent in InitializeComponent.
         Classless XAML is loaded by __WxsgThemeLoader via ResourceDictionary.Source.
+        Classless pages go through the strip task first (see below) to remove x:Shared.
       -->
       <Resource Include="@(_WxsgClassedPage)" KeepDuplicates="false" />
-      <Resource Include="@(_WxsgClasslessPage)" KeepDuplicates="false" />
+    </ItemGroup>
+
+    <!--
+      Strip x:Shared attributes from classless XAML before embedding as resources.
+      x:Shared is only valid in compiled BAML; raw XAML loading (which WXSG uses) fails
+      with XamlParseException if x:Shared is present.  This applies to the embedded
+      resource bytes, not the source files, so no source file is modified.
+    -->
+    <WxsgStripXSharedFromXaml
+      InputFiles="@(_WxsgClasslessPage)"
+      OutputDirectory="$(IntermediateOutputPath)wxsg-stripped\"
+      ProjectDirectory="$(MSBuildProjectDirectory)"
+      AssemblyName="$(AssemblyName)"
+      Condition="'@(_WxsgClasslessPage)' != ''">
+      <Output TaskParameter="StrippedFiles" ItemName="_WxsgStrippedClasslessPage" />
+    </WxsgStripXSharedFromXaml>
+
+    <ItemGroup>
+      <Resource Include="@(_WxsgStrippedClasslessPage)" KeepDuplicates="false" />
+      <!-- When no stripping occurred (task skipped), fall back to originals -->
+      <Resource Include="@(_WxsgClasslessPage)"
+                Condition="'@(_WxsgStrippedClasslessPage)' == ''"
+                KeepDuplicates="false" />
     </ItemGroup>
   </Target>
 
@@ -198,6 +247,104 @@
       </AdditionalFiles>
     </ItemGroup>
   </Target>
+
+  <!--
+    Inline MSBuild task: preprocesses each classless XAML file before it is embedded
+    as a raw resource.  Two transformations are applied:
+
+    1. Strip x:Shared attributes — valid only in compiled BAML; the raw-XAML parser
+       (used when WPF loads pack:// resources that are not BAML) rejects them with
+       "Shared attribute can be used only in compiled resource dictionaries."
+
+    2. Add assembly= to bare clr-namespace: xmlns declarations — in BAML the compiler
+       bakes the current assembly into the type table, so omitting assembly= is valid.
+       In raw XAML the parser has no such context and fails to resolve the type.
+       Adding assembly=$(AssemblyName) restores the correct runtime lookup without
+       modifying the source files.
+
+    The Link metadata is set so MSBuild embeds the processed copy under the same
+    pack URI path as the original.
+  -->
+  <UsingTask TaskName="WxsgStripXSharedFromXaml"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <InputFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+      <ProjectDirectory ParameterType="System.String" Required="true" />
+      <AssemblyName ParameterType="System.String" Required="false" />
+      <StrippedFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Using Namespace="Microsoft.Build.Framework" />
+      <Using Namespace="Microsoft.Build.Utilities" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var result = new List<ITaskItem>();
+        Directory.CreateDirectory(OutputDirectory);
+        foreach (var inputFile in InputFiles)
+        {
+            try
+            {
+                var fullPath = inputFile.GetMetadata("FullPath");
+                if (string.IsNullOrEmpty(fullPath)) fullPath = inputFile.ItemSpec;
+                var content = File.ReadAllText(fullPath, Encoding.UTF8);
+
+                // 1. Strip x:Shared (BAML-only attribute).
+                var processed = Regex.Replace(
+                    content,
+                    @"[ \t]*x:Shared\s*=\s*""[^""]*""",
+                    string.Empty,
+                    RegexOptions.IgnoreCase);
+
+                // 2. Add assembly= to bare clr-namespace: xmlns values.
+                //    Pattern: clr-namespace:X" where X contains no ';' (no assembly= yet).
+                //    In BAML the compiler supplies the assembly; in raw XAML we must be explicit.
+                if (!string.IsNullOrEmpty(AssemblyName))
+                {
+                    processed = Regex.Replace(
+                        processed,
+                        @"(clr-namespace:[^;""]+)""",
+                        "$1;assembly=" + AssemblyName + "\"");
+                }
+
+                // Determine the link path (relative to project dir) so the embedded
+                // resource gets the same name as the original file.
+                var linkPath = inputFile.GetMetadata("Link");
+                if (string.IsNullOrEmpty(linkPath))
+                {
+                    // Compute relative path from project dir
+                    var proj = ProjectDirectory.TrimEnd(Path.DirectorySeparatorChar,
+                                                        Path.AltDirectorySeparatorChar)
+                                               + Path.DirectorySeparatorChar;
+                    linkPath = fullPath.StartsWith(proj, StringComparison.OrdinalIgnoreCase)
+                        ? fullPath.Substring(proj.Length)
+                        : Path.GetFileName(fullPath);
+                }
+
+                var outPath = Path.Combine(OutputDirectory, linkPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(outPath));
+                File.WriteAllText(outPath, processed, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+                var outItem = new TaskItem(outPath);
+                inputFile.CopyMetadataTo(outItem);
+                outItem.SetMetadata("Link", linkPath);
+                result.Add(outItem);
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("WxsgStripXShared: failed to process '{0}': {1}",
+                               inputFile.ItemSpec, ex.Message);
+            }
+        }
+        StrippedFiles = result.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
 
   <UsingTask TaskName="WxsgGenerateFSharpCode"
              TaskFactory="RoslynCodeTaskFactory"
