@@ -981,7 +981,14 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
             if (!string.IsNullOrWhiteSpace(typeToken))
             {
-                return "__WXSG_ResolveTypeToken(" + EscapeStringLiteral(XamlQuotedValueSemantics.TrimAndUnquote(typeToken).Trim()) + ")";
+                var __plainTypeToken = XamlQuotedValueSemantics.TrimAndUnquote(typeToken).Trim();
+                var __resolvedRt = ResolveRuntimeType(__plainTypeToken.Contains(':') ? __plainTypeToken.Substring(__plainTypeToken.IndexOf(':') + 1) : __plainTypeToken);
+                if (__resolvedRt is not null)
+                {
+                    return "typeof(" + QualifyType(__resolvedRt.FullName) + ")";
+                }
+
+                return "__WXSG_ResolveTypeToken(" + EscapeStringLiteral(__plainTypeToken) + ")";
             }
         }
 
@@ -1028,6 +1035,15 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
         if (normalizedType == "Type" || normalizedType == "System.Type")
         {
+            if (TryUnquote(valueExpression, out var __valueLiteral))
+            {
+                var __rt = ResolveRuntimeType(__valueLiteral.Trim());
+                if (__rt is not null)
+                {
+                    return "typeof(" + QualifyType(__rt.FullName) + ")";
+                }
+            }
+
             return "__WXSG_ResolveTypeToken(" + valueExpression + ")";
         }
 
@@ -1577,6 +1593,28 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     (string.Equals(assignment.ClrPropertyTypeName?.Replace("global::", string.Empty), "System.Windows.DependencyProperty", StringComparison.Ordinal) ||
                      string.Equals(assignment.ClrPropertyTypeName, "DependencyProperty", StringComparison.Ordinal)))
                 {
+                    // Try to resolve owner type at generator time for tokens like "OwnerType.Property" and
+                    // emit direct static field access: typeof(OwnerType).PropertyProperty
+                    if (TryUnquote(assignment.ValueExpression, out var __ownerPropLiteral))
+                    {
+                        var __lastDot = __ownerPropLiteral.LastIndexOf('.');
+                        if (__lastDot > 0 && __lastDot < __ownerPropLiteral.Length - 1)
+                        {
+                            var __ownerToken = __ownerPropLiteral.Substring(0, __lastDot);
+                            var __propName = __ownerPropLiteral.Substring(__lastDot + 1);
+                            var __ownerSimple = __ownerToken;
+                            var __colonIdx = __ownerSimple.IndexOf(':');
+                            if (__colonIdx >= 0 && __colonIdx < __ownerSimple.Length - 1)
+                                __ownerSimple = __ownerSimple.Substring(__colonIdx + 1);
+                            var __ownerType = ResolveRuntimeType(__ownerSimple);
+                            if (__ownerType is not null)
+                            {
+                                Builder.AppendLine(MemberIndent + "    " + instanceVariable + "." + assignment.PropertyName + " = typeof(" + QualifyType(__ownerType.FullName) + ")." + __propName + "Property;");
+                                continue;
+                            }
+                        }
+                    }
+
                     var targetTypeExpression = ambientStyleTargetTypeExpression ?? "typeof(global::System.Windows.FrameworkElement)";
                     Builder.AppendLine(
                         MemberIndent + "    " +
@@ -1591,6 +1629,27 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                     (string.Equals(assignment.ClrPropertyTypeName?.Replace("global::", string.Empty), "System.Windows.DependencyProperty", StringComparison.Ordinal) ||
                      string.Equals(assignment.ClrPropertyTypeName, "DependencyProperty", StringComparison.Ordinal)))
                 {
+                    // Try to resolve owner type at generator time for tokens like "OwnerType.Property"
+                    if (TryUnquote(assignment.ValueExpression, out var __ownerPropLit2))
+                    {
+                        var __lastDot2 = __ownerPropLit2.LastIndexOf('.');
+                        if (__lastDot2 > 0 && __lastDot2 < __ownerPropLit2.Length - 1)
+                        {
+                            var __ownerToken2 = __ownerPropLit2.Substring(0, __lastDot2);
+                            var __propName2 = __ownerPropLit2.Substring(__lastDot2 + 1);
+                            var __ownerSimple2 = __ownerToken2;
+                            var __colonIdx2 = __ownerSimple2.IndexOf(':');
+                            if (__colonIdx2 >= 0 && __colonIdx2 < __ownerSimple2.Length - 1)
+                                __ownerSimple2 = __ownerSimple2.Substring(__colonIdx2 + 1);
+                            var __ownerType2 = ResolveRuntimeType(__ownerSimple2);
+                            if (__ownerType2 is not null)
+                            {
+                                Builder.AppendLine(MemberIndent + "    " + instanceVariable + "." + assignment.PropertyName + " = typeof(" + QualifyType(__ownerType2.FullName) + ")." + __propName2 + "Property;");
+                                continue;
+                            }
+                        }
+                    }
+
                     Builder.AppendLine(
                         MemberIndent + "    " +
                         instanceVariable + "." + assignment.PropertyName + " = " +
