@@ -1,4 +1,4 @@
-<Window x:Class="MainViewSample.MainView"
+<Window x:Class="MainViewSample.CustomStartup.MainView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="MainView Sample" Height="300" Width="400">

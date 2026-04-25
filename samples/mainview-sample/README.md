@@ -5,6 +5,7 @@ This sample demonstrates a WXSG-generated WPF app that starts from `MainView.xam
 Purpose
 - Exercise WXSG behavior for projects that do not contain a `MainWindow` type.
 - Reproducer / verification for issue: https://github.com/lextudio/wxsg/issues/8
+- Also verify StartupUri handling when the referenced XAML's `x:Class` uses a different namespace than the project's default (this sample now uses `MainView.xaml` with x:Class `MainViewSample.CustomStartup.MainView`).
 
 Build & Run
 ```powershell

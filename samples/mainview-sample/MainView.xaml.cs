@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace MainViewSample;
+namespace MainViewSample.CustomStartup;
 
 public partial class MainView : Window
 {

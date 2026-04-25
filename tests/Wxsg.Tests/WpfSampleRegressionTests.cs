@@ -151,6 +151,27 @@ public class WpfSampleRegressionTests
     }
 
     [Fact]
+    public void DynamicResource_Sample_Builds_And_Emits_DynamicResourceHandling()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/dynamicresource-sample/DynamicResourceSample.csproj",
+            "wpf-sample-dynamicresource");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        // Generator should not rely on TypeDescriptor to parse Brush tokens like "{DynamicResource ...}"
+        Assert.DoesNotContain("TypeDescriptor.GetConverter(typeof(global::System.Windows.Media.Brush)).ConvertFromInvariantString", generatedCode, StringComparison.Ordinal);
+
+        // Expect the generator to either emit a DynamicResourceExtension or resolve via TryFindResource at runtime
+        Assert.Contains("TryFindResource(", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MainView_Sample_With_No_MainWindow_Builds_And_Does_Not_Reference_MainWindow()
     {
         if (!OperatingSystem.IsWindows())
@@ -166,8 +187,10 @@ public class WpfSampleRegressionTests
 
         // Ensure generator does not emit a hard dependency on a MainWindow type
         Assert.DoesNotContain("typeof(MainWindow).Assembly", generatedCode, StringComparison.Ordinal);
-        // Ensure startup window creation targets the MainView type
-        Assert.Contains("MainViewSample.MainView", generatedCode, StringComparison.Ordinal);
+        // Ensure startup window creation targets the MainView type (allow custom namespace in sample)
+        Assert.True(
+            generatedCode.Contains("MainViewSample.CustomStartup.MainView", StringComparison.Ordinal),
+            "Generated code does not reference the expected MainView type.");
     }
 
     [Fact]
