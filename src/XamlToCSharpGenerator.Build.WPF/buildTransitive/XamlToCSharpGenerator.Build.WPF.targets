@@ -409,9 +409,9 @@
     <!-- Preprocess classless Page XAML (themes/resource dictionaries) before
          MarkupCompilePass1 so the WPF XAML compiler can resolve same-assembly
          clr-namespace declarations and BAML generation succeeds without
-         modifying upstream source files. This uses the inline WxsgStripXSharedFromXaml
-         task to strip x:Shared and add assembly=$(AssemblyName) to bare
-         "clr-namespace:..." xmlns values. -->
+         modifying upstream source files. This uses the inline WxsgNormalizeXamlForBaml
+         task to strip x:Shared and remove assembly=$(AssemblyName) from
+         "clr-namespace:...;assembly=X" xmlns values. -->
     <Target Name="_WxsgPreprocessClasslessXaml"
             BeforeTargets="MarkupCompilePass1"
             Condition="'$(WpfXsgEnabled)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
@@ -422,19 +422,47 @@
           Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
       </ItemGroup>
 
-      <Message Importance="Low" Text="WXSG: preprocessing classless XAML files: %(_WxsgClasslessToProcess.Identity)" />
+      <!--
+        Only normalize files whose content would actually change: those containing
+        x:Shared (a BAML-only attribute the raw XAML parser rejects) or an explicit
+        assembly=$(AssemblyName) qualifier on a clr-namespace: URI (which MarkupCompile
+        rejects because it conflicts with the implicit local-assembly context).
 
-      <WxsgNormalizeXamlForBaml InputFiles="@(_WxsgClasslessToProcess)"
+        Files that need no change are left as their ORIGINAL Page items.  Replacing an
+        unchanged file with an identical copy would still break the MarkupCompile
+        incremental cache (path mismatch) and trigger the stricter MarkupCompilePass2
+        type-resolution path.  Pass2 is more strict than Pass1: it reports MC3050 as
+        a hard error for any unresolvable type, including forward-references to types
+        from sibling assemblies embedded in a classless ResourceDictionary that WPF
+        accepts at runtime via late-bound BAML loading.
+      -->
+      <ItemGroup>
+        <_WxsgClasslessNeedingNorm Include="@(_WxsgClasslessToProcess)"
+          Condition="'%(FullPath)' != '' and (
+            $([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Shared')) or
+            $([System.IO.File]::ReadAllText('%(FullPath)').Contains('assembly=$(AssemblyName)'))
+          )" />
+        <_WxsgClasslessUnchanged Include="@(_WxsgClasslessToProcess)"
+          Condition="'%(FullPath)' != '' and
+            !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Shared')) and
+            !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('assembly=$(AssemblyName)'))
+          " />
+      </ItemGroup>
+
+      <Message Importance="Low" Text="WXSG: normalizing classless XAML (x:Shared or assembly= present): %(_WxsgClasslessNeedingNorm.Identity)" />
+      <Message Importance="Low" Text="WXSG: skipping classless XAML normalization (no changes needed): %(_WxsgClasslessUnchanged.Identity)" />
+
+      <WxsgNormalizeXamlForBaml InputFiles="@(_WxsgClasslessNeedingNorm)"
                                  OutputDirectory="$(IntermediateOutputPath)wxsg\stripped"
                                  ProjectDirectory="$(MSBuildProjectDirectory)"
                                  AssemblyName="$(AssemblyName)">
         <Output TaskParameter="NormalizedFiles" ItemName="_WxsgStrippedClassless" />
       </WxsgNormalizeXamlForBaml>
 
-      <!-- Replace original Page items with the processed copies (preserve Link metadata
-           so pack:// URIs remain the same). -->
+      <!-- Replace only files that actually needed normalization with their processed
+           copies.  Files in _WxsgClasslessUnchanged keep their original Page entry. -->
       <ItemGroup>
-        <Page Remove="@(_WxsgClasslessToProcess)" />
+        <Page Remove="@(_WxsgClasslessNeedingNorm)" />
         <Page Include="@(_WxsgStrippedClassless)" />
       </ItemGroup>
     </Target>
