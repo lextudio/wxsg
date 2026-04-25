@@ -1,0 +1,10 @@
+<Window x:Class="XamlToCSharpGenerator.Samples.AttachedPropertySample.Window1"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XamlToCSharpGenerator.Samples.AttachedPropertySample"
+        Title="AttachedPropertySample" Height="200" Width="400">
+  <Grid>
+    <!-- Unqualified attached-property attribute usage - matches our fix -->
+    <local:AttachedPropertyControl ShowAlternation="True" />
+  </Grid>
+</Window>

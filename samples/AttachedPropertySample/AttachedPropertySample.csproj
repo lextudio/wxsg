@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>AttachedPropertySample</AssemblyName>
+    <RootNamespace>XamlToCSharpGenerator.Samples.AttachedPropertySample</RootNamespace>
+  </PropertyGroup>
+
+</Project>

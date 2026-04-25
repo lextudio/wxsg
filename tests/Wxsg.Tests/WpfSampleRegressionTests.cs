@@ -151,6 +151,23 @@ public class WpfSampleRegressionTests
     }
 
     [Fact]
+    public void AttachedProperty_UnqualifiedAttribute_Resolves_As_AttachedProperty()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/AttachedPropertySample/AttachedPropertySample.csproj",
+            "wpf-sample-attachedproperty");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains(".SetShowAlternation(", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DynamicResource_Sample_Builds_And_Emits_DynamicResourceHandling()
     {
         if (!OperatingSystem.IsWindows())

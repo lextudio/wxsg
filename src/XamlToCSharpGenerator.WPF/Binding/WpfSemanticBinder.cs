@@ -330,6 +330,29 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         var property = TypeMemberFinder.FindProperty(objectType, assignmentName);
         if (property is null)
         {
+            // Support unqualified attached-property attribute syntax (e.g. `ShowAlternation="True"`)
+            // by resolving attached properties owned by the element type itself.
+            var attachedPropertyType = TypeResolver.ResolveAttachedPropertyType(objectType!, assignmentName, context);
+            if (attachedPropertyType is not null)
+            {
+                var attachedValueConversion = MarkupExtensionResolver.ConvertAssignmentValue(assignment.Value, context);
+                assignments.Add(new ResolvedPropertyAssignment(
+                    PropertyName: assignmentName,
+                    ValueExpression: attachedValueConversion.ValueExpression,
+                    ClrPropertyOwnerTypeName: ToDisplayName(objectType),
+                    ClrPropertyTypeName: attachedPropertyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    Line: assignment.Line,
+                    Column: assignment.Column,
+                    Condition: assignment.Condition,
+                    ValueKind: attachedValueConversion.ValueKind,
+                    FrameworkPayload: new ResolvedFrameworkPropertyPayload(
+                        FrameworkId: "WPF",
+                        PropertyOwnerTypeName: ToDisplayName(objectType),
+                        PropertyFieldName: null)));
+
+                return;
+            }
+
             context.AddUnknownPropertyDiagnostic(assignmentName, ToDisplayName(objectType), assignment.Line, assignment.Column);
             return;
         }
