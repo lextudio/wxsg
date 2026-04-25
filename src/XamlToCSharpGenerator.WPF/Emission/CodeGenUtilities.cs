@@ -233,6 +233,23 @@ internal static class CodeGenUtilities
             return "(" + QualifyType(normalizedType) + ")" + callExpr;
         }
 
+        // {DynamicResource key} — emit a DynamicResourceExtension instance so template
+        // and factory contexts preserve the markup extension semantics instead of
+        // attempting to convert the literal string (which would call e.g. Brush.Parse
+        // and throw when the token contains markup).  Handle nested x:Static keys.
+        if (literalValue.StartsWith("{DynamicResource ", StringComparison.Ordinal) &&
+            literalValue.EndsWith("}", StringComparison.Ordinal))
+        {
+            const string dynOpen = "{DynamicResource ";
+            var dynKey = literalValue.Substring(dynOpen.Length, literalValue.Length - dynOpen.Length - 1).Trim();
+            if (dynKey.StartsWith("{x:Static ", StringComparison.Ordinal) && dynKey.EndsWith("}", StringComparison.Ordinal))
+            {
+                return "new global::System.Windows.DynamicResourceExtension(__WXSG_ResolveXStatic(" + EscapeStringLiteral(dynKey) + "))";
+            }
+
+            return "new global::System.Windows.DynamicResourceExtension(" + EscapeStringLiteral(dynKey) + ")";
+        }
+
         if (normalizedType == "string" || normalizedType == "System.String" || normalizedType == "object" || normalizedType == "System.Object")
         {
             return valueExpression;
