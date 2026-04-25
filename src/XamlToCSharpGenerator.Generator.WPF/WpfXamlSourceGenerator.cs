@@ -404,8 +404,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                                     var xmlnsValue = xmlReader.Value;
                                     context.XmlnsDictionary[prefix] = xmlnsValue;
 
-                                    if (!xmlnsValue.StartsWith("clr-namespace:", global::System.StringComparison.OrdinalIgnoreCase) ||
-                                        xmlnsValue.IndexOf(";assembly=", global::System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                    if (!xmlnsValue.StartsWith("clr-namespace:", global::System.StringComparison.OrdinalIgnoreCase))
                                     {
                                         continue;
                                     }
@@ -414,6 +413,24 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                                     if (string.IsNullOrWhiteSpace(clrNamespace))
                                     {
                                         continue;
+                                    }
+
+                                    // If xmlns contains an explicit assembly= part, only map it here
+                                    // when it refers to the same assembly we determined from the
+                                    // pack:// URI (or the generated assembly name). This lets
+                                    // WXSG support both bare "clr-namespace:Foo" and the
+                                    // common compiled form "clr-namespace:Foo;assembly=Foo".
+                                    var asmIdx = xmlnsValue.IndexOf(";assembly=", global::System.StringComparison.OrdinalIgnoreCase);
+                                    if (asmIdx >= 0)
+                                    {
+                                        var asmPart = xmlnsValue.Substring(asmIdx + ";assembly=".Length);
+                                        var semicolon = asmPart.IndexOf(';');
+                                        if (semicolon >= 0) asmPart = asmPart.Substring(0, semicolon);
+                                        asmPart = asmPart.Trim();
+                                        if (!string.Equals(asmPart, assemblyNameForMappings, global::System.StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            continue;
+                                        }
                                     }
 
                                     context.XamlTypeMapper.AddMappingProcessingInstruction(
@@ -470,8 +487,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                                         var xmlnsValue = header.Substring(valStart, valEnd - valStart);
                                         context.XmlnsDictionary[prefix] = xmlnsValue;
 
-                                        if (!xmlnsValue.StartsWith("clr-namespace:", global::System.StringComparison.OrdinalIgnoreCase) ||
-                                            xmlnsValue.IndexOf(";assembly=", global::System.StringComparison.OrdinalIgnoreCase) >= 0)
+                                        if (!xmlnsValue.StartsWith("clr-namespace:", global::System.StringComparison.OrdinalIgnoreCase))
                                         {
                                             pos = valEnd + 1;
                                             continue;
@@ -482,6 +498,20 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                                         {
                                             pos = valEnd + 1;
                                             continue;
+                                        }
+
+                                        var asmIdx2 = xmlnsValue.IndexOf(";assembly=", global::System.StringComparison.OrdinalIgnoreCase);
+                                        if (asmIdx2 >= 0)
+                                        {
+                                            var asmPart = xmlnsValue.Substring(asmIdx2 + ";assembly=".Length);
+                                            var semicolon = asmPart.IndexOf(';');
+                                            if (semicolon >= 0) asmPart = asmPart.Substring(0, semicolon);
+                                            asmPart = asmPart.Trim();
+                                            if (!string.Equals(asmPart, assemblyNameForMappings, global::System.StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                pos = valEnd + 1;
+                                                continue;
+                                            }
                                         }
 
                                         context.XamlTypeMapper.AddMappingProcessingInstruction(

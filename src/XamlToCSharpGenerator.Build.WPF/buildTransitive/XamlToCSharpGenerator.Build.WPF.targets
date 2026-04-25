@@ -135,9 +135,9 @@
     -->
     <ItemGroup>
       <_WxsgClassedPage Include="@(Page)"
-          Condition="$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
+        Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and $([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
       <_WxsgClasslessPage Include="@(Page)"
-          Condition="!$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
+        Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
     </ItemGroup>
 
     <Delete Files="@(_WxsgClassedPage -> '$(IntermediateOutputPath)%(RelativeDir)%(Filename).baml')"
@@ -324,6 +324,120 @@
       ]]></Code>
     </Task>
   </UsingTask>
+
+  <!-- Normalize classless XAML for BAML: remove assembly=$(AssemblyName) from
+       clr-namespace values that reference the current assembly, and strip
+       x:Shared attributes. This helps MarkupCompilePass1 resolve same-assembly
+       types even when XAML files include an explicit assembly= reference. -->
+  <UsingTask TaskName="WxsgNormalizeXamlForBaml"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <InputFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputDirectory ParameterType="System.String" Required="true" />
+      <ProjectDirectory ParameterType="System.String" Required="true" />
+      <AssemblyName ParameterType="System.String" Required="false" />
+      <NormalizedFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.Collections.Generic" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="System.Text.RegularExpressions" />
+      <Using Namespace="Microsoft.Build.Framework" />
+      <Using Namespace="Microsoft.Build.Utilities" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var result = new List<ITaskItem>();
+        Directory.CreateDirectory(OutputDirectory);
+        foreach (var inputFile in InputFiles)
+        {
+            try
+            {
+                var fullPath = inputFile.GetMetadata("FullPath");
+                if (string.IsNullOrEmpty(fullPath)) fullPath = inputFile.ItemSpec;
+                var content = File.ReadAllText(fullPath, Encoding.UTF8);
+
+                // 1. Strip x:Shared (BAML-only attribute).
+                var processed = Regex.Replace(
+                  content,
+                  @"[ \t]*x:Shared\s*=\s*""[^""]*""",
+                  string.Empty,
+                  RegexOptions.IgnoreCase);
+
+                // 2. Remove assembly=$(AssemblyName) when present on clr-namespace: values
+                //    so the compiler treats the xmlns as same-assembly. This avoids
+                //    MC3xxx errors when the XAML explicitly names the current assembly.
+                if (!string.IsNullOrEmpty(AssemblyName))
+                {
+                    var pattern = @"(clr-namespace:[^;""']+)\s*;\s*assembly\s*=\s*" + Regex.Escape(AssemblyName);
+                    processed = Regex.Replace(processed, pattern, "$1", RegexOptions.IgnoreCase);
+                }
+
+                // Determine the link path (relative to project dir) so the embedded
+                // resource gets the same name as the original file.
+                var linkPath = inputFile.GetMetadata("Link");
+                if (string.IsNullOrEmpty(linkPath))
+                {
+                    var proj = ProjectDirectory.TrimEnd(Path.DirectorySeparatorChar,
+                                                        Path.AltDirectorySeparatorChar)
+                                               + Path.DirectorySeparatorChar;
+                    linkPath = fullPath.StartsWith(proj, StringComparison.OrdinalIgnoreCase)
+                        ? fullPath.Substring(proj.Length)
+                        : Path.GetFileName(fullPath);
+                }
+
+                var outPath = Path.Combine(OutputDirectory, linkPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(outPath));
+                File.WriteAllText(outPath, processed, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+
+                var outItem = new TaskItem(outPath);
+                inputFile.CopyMetadataTo(outItem);
+                outItem.SetMetadata("Link", linkPath);
+                result.Add(outItem);
+            }
+            catch (Exception ex)
+            {
+                Log.LogWarning("WxsgNormalizeXamlForBaml: failed to process '{0}': {1}", inputFile.ItemSpec, ex.Message);
+            }
+        }
+        NormalizedFiles = result.ToArray();
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+    <!-- Preprocess classless Page XAML (themes/resource dictionaries) before
+         MarkupCompilePass1 so the WPF XAML compiler can resolve same-assembly
+         clr-namespace declarations and BAML generation succeeds without
+         modifying upstream source files. This uses the inline WxsgStripXSharedFromXaml
+         task to strip x:Shared and add assembly=$(AssemblyName) to bare
+         "clr-namespace:..." xmlns values. -->
+    <Target Name="_WxsgPreprocessClasslessXaml"
+            BeforeTargets="MarkupCompilePass1"
+            Condition="'$(WpfXsgEnabled)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+
+      <!-- Select Page items that do NOT contain x:Class (classless/theme dictionaries). -->
+      <ItemGroup>
+        <_WxsgClasslessToProcess Include="@(Page)"
+          Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
+      </ItemGroup>
+
+      <Message Importance="Low" Text="WXSG: preprocessing classless XAML files: %(_WxsgClasslessToProcess.Identity)" />
+
+      <WxsgNormalizeXamlForBaml InputFiles="@(_WxsgClasslessToProcess)"
+                                 OutputDirectory="$(IntermediateOutputPath)wxsg\stripped"
+                                 ProjectDirectory="$(MSBuildProjectDirectory)"
+                                 AssemblyName="$(AssemblyName)">
+        <Output TaskParameter="NormalizedFiles" ItemName="_WxsgStrippedClassless" />
+      </WxsgNormalizeXamlForBaml>
+
+      <!-- Replace original Page items with the processed copies (preserve Link metadata
+           so pack:// URIs remain the same). -->
+      <ItemGroup>
+        <Page Remove="@(_WxsgClasslessToProcess)" />
+        <Page Include="@(_WxsgStrippedClassless)" />
+      </ItemGroup>
+    </Target>
 
   <UsingTask TaskName="WxsgGenerateFSharpCode"
              TaskFactory="RoslynCodeTaskFactory"
