@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
 using System.Reflection;
+using System.IO;
+using System.Xml.Linq;
 using System.Text;
 using XamlToCSharpGenerator.Core.Abstractions;
 using XamlToCSharpGenerator.Core.Models;
@@ -321,6 +323,41 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             var fileName = System.IO.Path.GetFileNameWithoutExtension(uriValue.Replace('\\', '/'));
             if (string.IsNullOrWhiteSpace(fileName))
                 return null;
+
+            // Try to resolve the referenced XAML file and read its x:Class if present.
+            // This prefers an explicit `x:Class` declaration over the filename convention
+            // and fixes incorrect assumptions where the generated type lives in a
+            // different namespace (e.g. Views/MainView.xaml → AvalonDock.VS2013Test.Views.MainView).
+            try
+            {
+                var docPath = doc.FilePath;
+                if (!string.IsNullOrWhiteSpace(docPath))
+                {
+                    var docDir = Path.GetDirectoryName(docPath) ?? string.Empty;
+                    var candidatePath = Path.Combine(docDir, uriValue.Replace('/', Path.DirectorySeparatorChar).TrimStart(Path.DirectorySeparatorChar));
+                    if (File.Exists(candidatePath))
+                    {
+                        var xdoc = XDocument.Load(candidatePath);
+                        var xns = XNamespace.Get("http://schemas.microsoft.com/winfx/2006/xaml");
+                        var classAttr = xdoc.Root?.Attribute(xns + "Class")?.Value?.Trim();
+                        if (!string.IsNullOrWhiteSpace(classAttr))
+                        {
+                            // If x:Class is unqualified, assume the application's namespace
+                            if (classAttr.IndexOf('.') < 0)
+                            {
+                                var appNs = doc.ClassNamespace;
+                                return string.IsNullOrEmpty(appNs) ? classAttr : appNs + "." + classAttr;
+                            }
+
+                            return classAttr;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Best-effort only; fall back to filename convention on any failure.
+            }
 
             // Prefix with the Application class's namespace (the conventional location for windows).
             var ns = doc.ClassNamespace;
