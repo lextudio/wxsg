@@ -48,6 +48,28 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
         var rootNode = BindObjectNode(document.RootObject, context);
         var namedElements = ResolveNamedElements(document.NamedElements, context);
 
+        // Detect whether the user has authored an OnStartup override on the partial App class.
+        bool hasUserOnStartupOverride = false;
+        if (!string.IsNullOrWhiteSpace(document.ClassFullName))
+        {
+            var classSymbol = context.Compilation.GetTypeByMetadataName(document.ClassFullName);
+            if (classSymbol is not null)
+            {
+                foreach (var member in classSymbol.GetMembers("OnStartup"))
+                {
+                    if (member is IMethodSymbol method && method.IsOverride && method.Parameters.Length == 1)
+                    {
+                        var paramType = method.Parameters[0].Type?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        if (!string.IsNullOrEmpty(paramType) && paramType.EndsWith("System.Windows.StartupEventArgs", StringComparison.Ordinal))
+                        {
+                            hasUserOnStartupOverride = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
         // WPF relative pack URI: /AssemblyName;component/SubFolder/File.xaml
         var buildUri = BuildPackUri(document, compilation);
 
@@ -62,6 +84,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             EmitNameScopeRegistration: false,
             EmitStaticResourceResolver: false,
             HasXBind: false,
+            HasUserOnStartupOverride: hasUserOnStartupOverride,
             RootObject: rootNode,
             NamedElements: namedElements,
             Resources: ImmutableArray<ResolvedResourceDefinition>.Empty,

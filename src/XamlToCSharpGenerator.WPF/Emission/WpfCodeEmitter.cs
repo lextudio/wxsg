@@ -69,14 +69,11 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(classDeclaration);
         sb.AppendLine(indent + "{");
 
-        // If the XAML root is a derived control (root element type != generated class),
-        // emit a static ctor that overrides DefaultStyleKey metadata so the derived
-        // control automatically picks up the base control's style (no manual ApplyTemplate).
+        // Derived control DefaultStyleKey override
         var rootTypeName = viewModel.RootObject.TypeName;
         if (!IsApplicationDefinition(viewModel) && !string.IsNullOrWhiteSpace(rootTypeName) && !string.IsNullOrWhiteSpace(doc.ClassFullName))
         {
             var normalizedRoot = rootTypeName.Replace("global::", string.Empty);
-            // Emit override only for non-system control roots where the XAML root isn't the generated class itself.
             if (!normalizedRoot.StartsWith("System.", StringComparison.Ordinal) &&
                 !normalizedRoot.StartsWith("Microsoft.", StringComparison.Ordinal) &&
                 !string.Equals(normalizedRoot, doc.ClassFullName, StringComparison.Ordinal))
@@ -96,7 +93,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         foreach (var element in viewModel.NamedElements)
         {
             sb.AppendLine(emitter.MemberIndent + "#line " + element.Line.ToString(CultureInfo.InvariantCulture));
-            sb.AppendLine(emitter.MemberIndent + "[global::System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Performance\", \"CA1823:AvoidUnusedPrivateFields\")]");
+            sb.AppendLine(emitter.MemberIndent + "[global::System.Diagnostics.CodeAnalysis.SuppressMessage(\"Microsoft.Performance\", \"CA1823:AvoidUnusedPrivateFields\")]" );
             sb.AppendLine(emitter.MemberIndent + element.FieldModifier + " " + CodeGenUtilities.QualifyType(element.TypeName) + " " + CodeGenUtilities.EscapeIdentifier(element.Name) + ";");
             sb.AppendLine(emitter.MemberIndent + "#line default");
             sb.AppendLine();
@@ -106,12 +103,18 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(emitter.MemberIndent + "private bool _contentLoaded;");
         sb.AppendLine();
 
-        EmitInitializeComponent(emitter, viewModel);
+        string? startupWindowType = null;
+        var hasUserOnStartupOverride = viewModel.HasUserOnStartupOverride;
+        if (IsApplicationDefinition(viewModel))
+        {
+            startupWindowType = ResolveStartupWindowType(viewModel, doc);
+        }
+
+        EmitInitializeComponent(emitter, viewModel, startupWindowType, hasUserOnStartupOverride);
 
         if (IsApplicationDefinition(viewModel))
         {
-            var startupWindowType = ResolveStartupWindowType(viewModel, doc);
-            if (startupWindowType is not null)
+            if (startupWindowType is not null && !hasUserOnStartupOverride)
             {
                 sb.AppendLine();
                 EmitOnStartup(emitter, startupWindowType);
@@ -131,13 +134,13 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         return sb.ToString();
     }
 
-    private static void EmitInitializeComponent(GraphEmitter emitter, ResolvedViewModel viewModel)
+    private static void EmitInitializeComponent(GraphEmitter emitter, ResolvedViewModel viewModel, string? startupWindowTypeName, bool attachStartupHandler)
     {
         var sb = emitter.Builder;
         var i = emitter.MemberIndent;
 
         sb.AppendLine(i + "[global::System.Diagnostics.DebuggerNonUserCode]");
-        sb.AppendLine(i + "[global::System.CodeDom.Compiler.GeneratedCode(\"" + GeneratorName + "\", \"" + GeneratorVersion + "\")]");
+        sb.AppendLine(i + "[global::System.CodeDom.Compiler.GeneratedCode(\"" + GeneratorName + "\", \"" + GeneratorVersion + "\")]" );
         sb.AppendLine(i + "public void InitializeComponent()");
         sb.AppendLine(i + "{");
         sb.AppendLine(i + "    if (_contentLoaded) return;");
@@ -147,9 +150,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    // Phase 3: pure C# object-graph construction (no BAML LoadComponent).");
         sb.AppendLine(i + "    __WXSG_BuildObjectGraph();");
 
-        // Runtime fallback: if this XAML-root subclass did not pick up a template via DefaultStyleKey,
-        // attempt to find the base control's style at runtime and apply it so templates render
-        // even when the implicit theme lookup doesn't resolve automatically.
+        // Runtime fallback: attempt to apply base control style if needed
         var rootType = viewModel.RootObject.TypeName;
         var docClassFullName = viewModel.Document.ClassFullName;
         if (!string.IsNullOrWhiteSpace(rootType) && !string.IsNullOrWhiteSpace(docClassFullName))
@@ -176,6 +177,22 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 sb.AppendLine(i + "    catch { }");
             }
         }
+
+        // If the user overrides OnStartup, attach a Startup handler instead of emitting OnStartup.
+        if (attachStartupHandler && !string.IsNullOrWhiteSpace(startupWindowTypeName))
+        {
+            sb.AppendLine(i + "    try");
+            sb.AppendLine(i + "    {");
+            sb.AppendLine(i + "        this.Startup += (s, e) =>");
+            sb.AppendLine(i + "        {");
+            sb.AppendLine(i + "            var __startupWindow = new " + CodeGenUtilities.QualifyType(startupWindowTypeName) + "();");
+            sb.AppendLine(i + "            this.MainWindow = __startupWindow;");
+            sb.AppendLine(i + "            __startupWindow.Show();");
+            sb.AppendLine(i + "        }; ");
+            sb.AppendLine(i + "    }");
+            sb.AppendLine(i + "    catch { }");
+        }
+
         sb.AppendLine(i + "}");
         sb.AppendLine();
 
@@ -295,14 +312,6 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "}");
     }
 
-    /// <summary>
-    /// Finds the <c>StartupUri</c> property assignment on the Application root node and
-    /// derives the startup window's fully-qualified type name using the same filename-to-class
-    /// convention WPF itself uses: <c>StartupUri="MainWindow.xaml"</c> →
-    /// <c>{AppNamespace}.MainWindow</c>.
-    ///
-    /// Returns <c>null</c> when <c>StartupUri</c> is not set.
-    /// </summary>
     private static string? ResolveStartupWindowType(ResolvedViewModel viewModel, XamlDocumentModel doc)
     {
         foreach (var assignment in viewModel.RootObject.PropertyAssignments)
@@ -310,24 +319,16 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             if (!string.Equals(assignment.PropertyName, "StartupUri", StringComparison.Ordinal))
                 continue;
 
-            // Value expression is a quoted string like "\"MainWindow.xaml\""
             if (!CodeGenUtilities.TryUnquote(assignment.ValueExpression, out var uriValue))
                 uriValue = assignment.ValueExpression.Trim('"');
 
             if (string.IsNullOrWhiteSpace(uriValue))
                 return null;
 
-            // Extract the filename without extension from a potentially path-qualified URI:
-            // "MainWindow.xaml"        → "MainWindow"
-            // "Views/MainWindow.xaml"  → "MainWindow"
             var fileName = System.IO.Path.GetFileNameWithoutExtension(uriValue.Replace('\\', '/'));
             if (string.IsNullOrWhiteSpace(fileName))
                 return null;
 
-            // Try to resolve the referenced XAML file and read its x:Class if present.
-            // This prefers an explicit `x:Class` declaration over the filename convention
-            // and fixes incorrect assumptions where the generated type lives in a
-            // different namespace (e.g. Views/MainView.xaml → AvalonDock.VS2013Test.Views.MainView).
             try
             {
                 var docPath = doc.FilePath;
@@ -342,7 +343,6 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                         var classAttr = xdoc.Root?.Attribute(xns + "Class")?.Value?.Trim();
                         if (!string.IsNullOrWhiteSpace(classAttr))
                         {
-                            // If x:Class is unqualified, assume the application's namespace
                             if (classAttr.IndexOf('.') < 0)
                             {
                                 var appNs = doc.ClassNamespace;
@@ -356,10 +356,8 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             }
             catch
             {
-                // Best-effort only; fall back to filename convention on any failure.
             }
 
-            // Prefix with the Application class's namespace (the conventional location for windows).
             var ns = doc.ClassNamespace;
             return string.IsNullOrEmpty(ns) ? fileName : ns + "." + fileName;
         }

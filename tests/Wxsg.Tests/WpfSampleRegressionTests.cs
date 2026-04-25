@@ -209,6 +209,22 @@ public class WpfSampleRegressionTests
             generatedCode.Contains("MainViewSample.CustomStartup.MainView", StringComparison.Ordinal),
             "Generated code does not reference the expected MainView type.");
     }
+    
+    [Fact]
+    public void OnStartup_Sample_Builds_With_WXSG()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/onstartup-sample/OnStartupSample.csproj",
+            "wpf-sample-onstartup");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+        Assert.NotEmpty(generatedCode);
+    }
 
     [Fact]
     public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
