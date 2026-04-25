@@ -1,10 +1,48 @@
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
+          Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props')" />
+
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <WpfXsgEnabled>true</WpfXsgEnabled>
+    <WpfXsgCSharpMode>true</WpfXsgCSharpMode>
+    <WpfXsgEmitGeneratedFiles>true</WpfXsgEmitGeneratedFiles>
+    <WpfXsgLanguageSupported>true</WpfXsgLanguageSupported>
+    <XamlSourceGenEnabled>true</XamlSourceGenEnabled>
     <AssemblyName>AttachedPropertySample</AssemblyName>
     <RootNamespace>XamlToCSharpGenerator.Samples.AttachedPropertySample</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlToCSharpGenerator.Generator.WPF\XamlToCSharpGenerator.Generator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\XamlToCSharpGenerator.WPF\XamlToCSharpGenerator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Compiler\XamlToCSharpGenerator.Compiler.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Core\XamlToCSharpGenerator.Core.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.ExpressionSemantics\XamlToCSharpGenerator.ExpressionSemantics.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Framework.Abstractions\XamlToCSharpGenerator.Framework.Abstractions.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.MiniLanguageParsing\XamlToCSharpGenerator.MiniLanguageParsing.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets"
+          Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets')" />
 
 </Project>
