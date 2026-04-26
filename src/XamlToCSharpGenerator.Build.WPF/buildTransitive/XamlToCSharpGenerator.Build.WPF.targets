@@ -208,7 +208,32 @@
         Classless XAML does NOT need this — it stays in Page above and is embedded as BAML.
       -->
       <Resource Include="@(_WxsgClassedPage)" KeepDuplicates="false" />
+
+      <!--
+        BAML bypass: classless pages that contain {x:Type references to local types cannot
+        be processed by MarkupCompilePass1 without _wpftmp, and _wpftmp fails with WXSG
+        because WXSG source generator output is absent in that compilation.
+
+        Detection heuristic: a classless page has local type refs if it contains both
+        {x:Type and clr-namespace: — the {x:Type triggers local-type resolution,
+        and clr-namespace: (without ;assembly=) indicates the namespace is local.
+
+        We remove these from @(Page) so MarkupCompilePass1 never defers them, preventing
+        _wpftmp from being invoked.  _WxsgBamlBypass runs post-CoreCompile to generate
+        their BAML using the real compiled assembly for type resolution.
+      -->
+      <_WxsgDeferredClasslessPage Include="@(_WxsgClasslessPage)"
+        Condition="'%(FullPath)' != '' and
+                   $([System.IO.File]::Exists('%(FullPath)')) and
+                   $([System.IO.File]::ReadAllText('%(FullPath)').Contains('{x:Type')) and
+                   $([System.IO.File]::ReadAllText('%(FullPath)').Contains('clr-namespace:'))" />
+
+      <Page Remove="@(_WxsgDeferredClasslessPage)" />
+      <None Include="@(_WxsgDeferredClasslessPage)" />
     </ItemGroup>
+
+    <Message Importance="Low"
+             Text="WXSG: deferring classless page to post-CoreCompile BAML: %(_WxsgDeferredClasslessPage.Identity)" />
   </Target>
 
   <Target Name="_WxsgPrepareXamlVisualBasic"
@@ -802,5 +827,84 @@
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'F#' and !$(MSBuildProjectName.Contains('_wpftmp'))">
     <Message Importance="High"
              Text="WXSG F# mode uses an MSBuild prototype path (generated .g.fs + loose XAML copy). Roslyn source generators are unavailable in F# compilation." />
+  </Target>
+
+  <!--
+    Inline task: write a MarkupCompilePass2 .lref cache file for a given list of XAML files.
+    Format (from MS.Internal.Tasks.CompilerLocalReference / LocalReferenceFile.Serialize):
+      Line 1: InternalTypeHelperFile path (empty if not needed)
+      Line 2: LocalApplicationFile serialized (empty for libraries)
+      Line 3+: F<absolute-path>;<LinkAlias>;<LogicalName>
+    'F' means the file failed Pass1 and needs Pass2 with local type assembly.
+  -->
+  <UsingTask TaskName="WxsgWriteLrefFile"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <LocalMarkupPages ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+      <OutputFile ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Using Namespace="System" />
+      <Using Namespace="System.IO" />
+      <Using Namespace="System.Text" />
+      <Using Namespace="Microsoft.Build.Framework" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        var sb = new StringBuilder();
+        sb.AppendLine("");   // line 1: InternalTypeHelperFile (empty)
+        sb.AppendLine("");   // line 2: LocalApplicationFile (empty for non-application)
+        foreach (var page in LocalMarkupPages ?? Array.Empty<ITaskItem>())
+        {
+            var path = page.GetMetadata("FullPath");
+            if (string.IsNullOrEmpty(path)) path = page.ItemSpec;
+            var linkAlias    = page.GetMetadata("Link") ?? "";
+            var logicalName  = page.GetMetadata("LogicalName") ?? "";
+            sb.AppendLine("F" + path + ";" + linkAlias + ";" + logicalName);
+        }
+        var dir = Path.GetDirectoryName(OutputFile);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        // Write without BOM — MarkupCompilePass2 reads without BOM detection.
+        File.WriteAllText(OutputFile, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!--
+    Post-CoreCompile BAML bypass: generate BAML for classless pages that were removed from
+    @(Page) in _WxsgPrepareXamlCSharp to prevent _wpftmp from being triggered.
+    MarkupCompilePass2 is invoked here with the real compiled assembly as the local-type
+    reference, so {x:Type local:Foo} can be resolved without a temporary project.
+
+    TODO: inject the generated BAML into the assembly's .g.resources using
+    System.Reflection.Metadata so DefaultStyleKey lookups work at runtime.
+  -->
+  <Target Name="_WxsgBamlBypass"
+          AfterTargets="CoreCompile"
+          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and '@(_WxsgDeferredClasslessPage)' != '' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+
+    <WxsgWriteLrefFile
+        LocalMarkupPages="@(_WxsgDeferredClasslessPage)"
+        OutputFile="$(IntermediateOutputPath)$(AssemblyName)_MarkupCompile.lref" />
+
+    <!-- After CoreCompile the assembly lives in IntermediateOutputPath, not TargetPath yet
+         (CopyFilesToOutputDirectory hasn't run). Add it so Pass2 can resolve local types. -->
+    <PropertyGroup>
+      <_WxsgCompiledAssemblyPath>$(IntermediateOutputPath)$(TargetFileName)</_WxsgCompiledAssemblyPath>
+    </PropertyGroup>
+    <ItemGroup>
+      <_WxsgPass2References Include="@(ReferencePath)" />
+      <_WxsgPass2References Include="$(_WxsgCompiledAssemblyPath)"
+                            Condition="$([System.IO.File]::Exists('$(_WxsgCompiledAssemblyPath)'))" />
+    </ItemGroup>
+
+    <MarkupCompilePass2
+        AssemblyName="$(AssemblyName)"
+        Language="$(Language)"
+        OutputPath="$(IntermediateOutputPath)"
+        OutputType="$(OutputType)"
+        References="@(_WxsgPass2References)" />
+
+    <Message Importance="High"
+             Text="WXSG BamlBypass: BAML generated for @(_WxsgDeferredClasslessPage). TODO: inject into assembly .g.resources." />
   </Target>
 </Project>

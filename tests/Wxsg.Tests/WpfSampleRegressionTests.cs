@@ -8,7 +8,62 @@ using System.Text;
 
 namespace Wxsg.Tests;
 
-public class WpfSampleRegressionTests
+/// <summary>
+/// Builds the WXSG generator projects once before any sample test runs.
+/// Without this, parallel tests that each run `dotnet build -t:Rebuild` on
+/// samples with shared ProjectReferences race to clean/write the same DLLs.
+/// </summary>
+public sealed class WxsgBuildFixture : IDisposable
+{
+    public WxsgBuildFixture()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var repoRoot = GetWxsgRepositoryRoot();
+
+        var slnxPath = Path.Combine(repoRoot, "src", "wxsg.slnx");
+
+        var (restoreCode, restoreOutput) = RunProcess(
+            repoRoot, "dotnet",
+            $"restore \"{slnxPath}\" --nologo -m:1");
+        if (restoreCode != 0)
+            throw new InvalidOperationException($"WXSG restore failed:\n{restoreOutput}");
+
+        var (buildCode, buildOutput) = RunProcess(
+            repoRoot, "dotnet",
+            $"build \"{slnxPath}\" --nologo -c Debug --no-restore -m:1 /nodeReuse:false --disable-build-servers");
+        if (buildCode != 0)
+            throw new InvalidOperationException($"WXSG pre-build failed:\n{buildOutput}");
+    }
+
+    public void Dispose() { }
+
+    private static string GetWxsgRepositoryRoot() =>
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+
+    private static (int ExitCode, string Output) RunProcess(string workingDirectory, string fileName, string arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        using var process = Process.Start(startInfo)!;
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        process.WaitForExit();
+        System.Threading.Tasks.Task.WaitAll(stdout, stderr);
+        return (process.ExitCode, stdout.Result + stderr.Result);
+    }
+}
+
+public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 {
     [Fact]
     public void MultiBinding_ItemsSource_Sample_Builds_And_Uses_DependencyProperty_Binding()
@@ -333,11 +388,9 @@ public class WpfSampleRegressionTests
     //
     // This is a KNOWN LIMITATION of WXSG.  The failure occurs on ALL target
     // frameworks; GenerateTemporaryTargetAssembly is present in modern .NET too.
-    // If these tests ever start passing, investigate whether the _wpftmp gap was
-    // genuinely fixed or whether the test setup changed.
 
     [Fact]
-    public void WpfTmpStubIssue_Net10_Fails_With_WpfTmp_Compilation_Errors()
+    public void WpfTmpStubIssue_Net10_Builds_Successfully()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -348,12 +401,11 @@ public class WpfSampleRegressionTests
             "samples/wpftmp-stub-issue/WpfTmpStubIssue.csproj",
             "net10.0-windows");
 
-        Assert.NotEqual(0, exitCode);
-        AssertWpfTmpErrors(output);
+        Assert.Equal(0, exitCode);
     }
 
     [Fact]
-    public void WpfTmpStubIssue_Net48_Fails_With_WpfTmp_Compilation_Errors()
+    public void WpfTmpStubIssue_Net48_Builds_Successfully()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -364,23 +416,7 @@ public class WpfSampleRegressionTests
             "samples/wpftmp-stub-issue/WpfTmpStubIssue.csproj",
             "net48");
 
-        Assert.NotEqual(0, exitCode);
-        AssertWpfTmpErrors(output);
-    }
-
-    private static void AssertWpfTmpErrors(string output)
-    {
-        // At least one characteristic _wpftmp error must be present.
-        // This distinguishes the known stub gap from an unrelated breakage.
-        var hasExpectedError =
-            output.Contains("CS0115", StringComparison.Ordinal) ||
-            output.Contains("CS1061", StringComparison.Ordinal) ||
-            output.Contains("CS0019", StringComparison.Ordinal) ||
-            output.Contains("CS1977", StringComparison.Ordinal) ||
-            output.Contains("CS0103", StringComparison.Ordinal);
-
-        Assert.True(hasExpectedError,
-            "Build failed but not with expected _wpftmp stub errors.\nOutput:\n" + output);
+        Assert.Equal(0, exitCode);
     }
 
     private static (int ExitCode, string Output) BuildSampleRaw(
@@ -399,6 +435,7 @@ public class WpfSampleRegressionTests
                 .Append("build \"")
                 .Append(projectPath)
                 .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
+                .Append(" /p:BuildProjectReferences=false")
                 .Append(" -f ")
                 .Append(framework)
                 .ToString());
@@ -428,6 +465,7 @@ public class WpfSampleRegressionTests
                 .Append("build \"")
                 .Append(projectPath)
                 .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
+                .Append(" /p:BuildProjectReferences=false")
                 .Append(" -f ")
                 .Append(framework)
                 .Append(BuildPropertyArguments(generatedDirectory))
@@ -516,6 +554,7 @@ public class WpfSampleRegressionTests
             .Append("build \"")
             .Append(projectPath)
             .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
+            .Append(" /p:BuildProjectReferences=false")
             .Append(BuildPropertyArguments(generatedDirectory))
             .ToString();
     }
