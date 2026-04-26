@@ -1,0 +1,29 @@
+<!--
+  SCENARIO 3 — Event subscription on x:Name field typed as 'dynamic' (CS0019 / CS1977)
+              + passing field to typed parameter (CS1503)
+
+  This window embeds the local type ItemsPanel (from Scenario2) via x:Name.
+  WXSG generates a stub for PanelHost that declares the field for 'panel'.
+
+  BEFORE fix (field typed as 'dynamic'):
+    PanelHost.xaml.cs(18,25): error CS1061 — 'ItemsPanel' does not contain 'Children'
+      (because ItemsPanel stub had wrong base UserControl — fixed by Scenario 2)
+    PanelHost.xaml.cs(27,9):  error CS0019 — '+=' cannot be applied to 'dynamic' and 'anonymous method'
+      (because listView was typed as dynamic in the ItemsPanel stub)
+    PanelHost.xaml.cs(28,9):  error CS1977 — cannot use lambda with dynamically dispatched operation
+      (same cause)
+
+  AFTER fix (fields use actual WPF CLR types):
+    'panel'    → global::WpfTmpStubIssue.Scenario2_WrongBase.ItemsPanel  (clr-namespace:)
+    'listView' → global::System.Windows.Controls.ListView                (from wpfTypeMap)
+
+  x:FieldModifier="public" on listView in ItemsPanel.xaml is also respected —
+  the stub emits 'public ListView listView' so PanelHost can reach it.
+-->
+<Window x:Class="WpfTmpStubIssue.Scenario3_TypedField.PanelHost"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:WpfTmpStubIssue.Scenario2_WrongBase"
+        Title="PanelHost" Height="300" Width="400">
+    <local:ItemsPanel x:Name="panel" />
+</Window>

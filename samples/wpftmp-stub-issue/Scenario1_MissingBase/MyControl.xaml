@@ -1,0 +1,24 @@
+<!--
+  SCENARIO 1 — Missing base class in _wpftmp (CS0115)
+
+  WXSG removes this file from @(Page) so MarkupCompilePass1 never generates
+  MyControl.g.cs. The _wpftmp compilation then sees MyControl.xaml.cs declaring
+  `protected override void OnPropertyChanged(...)` but no partial class with a base
+  type — so 'override' has nothing to override.
+
+  Error (without stub):
+    MyControl.xaml.cs(12,28): error CS0115:
+      'MyControl.OnPropertyChanged(...)': no suitable method found to override
+
+  Fix: WxsgGenerateCSharpWpfTmpStubs generates a stub:
+    public partial class MyControl : global::System.Windows.Controls.UserControl {
+        public void InitializeComponent() { }
+    }
+-->
+<UserControl x:Class="WpfTmpStubIssue.Scenario1_MissingBase.MyControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <TextBlock Text="MyControl" />
+    </Grid>
+</UserControl>

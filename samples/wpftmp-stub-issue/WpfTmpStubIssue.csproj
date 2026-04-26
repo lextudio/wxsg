@@ -1,0 +1,57 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
+          Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props')" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!--
+      Regression test: build both targets and compare outcomes.
+        net10.0-windows  →  PASSES  (no GenerateTemporaryTargetAssembly on modern .NET)
+        net48            →  FAILS   (GenerateTemporaryTargetAssembly + _wpftmp gap)
+
+      The net10.0-windows pass proves the XAML/WXSG content itself is correct.
+      The net48 failure proves the _wpftmp stub issue is a .NET Framework-only problem.
+      This is the intended steady state: WXSG does not support .NET Framework.
+    -->
+    <TargetFrameworks>net10.0-windows;net48</TargetFrameworks>
+    <UseWPF>true</UseWPF>
+    <WpfXsgEnabled>true</WpfXsgEnabled>
+    <WpfXsgCSharpMode>true</WpfXsgCSharpMode>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <!--
+      Keep the generated _wpftmp.csproj on disk after a net48 build so you can
+      inspect exactly which files are compiled in the temporary assembly.
+    -->
+    <GenerateTemporaryTargetAssemblyDebuggingInformation>true</GenerateTemporaryTargetAssemblyDebuggingInformation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlToCSharpGenerator.Generator.WPF\XamlToCSharpGenerator.Generator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\XamlToCSharpGenerator.WPF\XamlToCSharpGenerator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Compiler\XamlToCSharpGenerator.Compiler.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Core\XamlToCSharpGenerator.Core.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.ExpressionSemantics\XamlToCSharpGenerator.ExpressionSemantics.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Framework.Abstractions\XamlToCSharpGenerator.Framework.Abstractions.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.MiniLanguageParsing\XamlToCSharpGenerator.MiniLanguageParsing.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets"
+          Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets')" />
+
+</Project>

@@ -1,0 +1,31 @@
+<!--
+  SCENARIO 2 — Wrong base class inferred for XAML-only class (CS1061)
+
+  This file has x:Class but NO code-behind (.xaml.cs).
+  The XAML root is <Grid>, so the generated partial class must extend Grid.
+  Grid inherits Panel.Children (UIElementCollection), which callers rely on.
+
+  Without the fix: WxsgGenerateCSharpWpfTmpStubs falls back to UserControl as the
+  base type when no code-behind is found, because UserControl is the most common root.
+  But UserControl has no Children property — it has Content (from ContentControl).
+
+  Error (with wrong base = UserControl, in _wpftmp, via PanelHost.xaml.cs):
+    PanelHost.xaml.cs(18,25): error CS1061:
+      'ItemsPanel' does not contain a definition for 'Children'
+
+  Fix: wpfTypeMap now maps "Grid" → global::System.Windows.Controls.Grid so the stub
+  correctly declares:
+    public partial class ItemsPanel : global::System.Windows.Controls.Grid {
+        public void InitializeComponent() { }
+    }
+
+  Real-world origin: BookmarkPadContent.xaml in ICSharpCode.SharpDevelop, which is
+  a Grid-rooted XAML-only class. BookmarkPad.cs then does:
+    this.control.Children.Add(toolbar);
+-->
+<Grid x:Class="WpfTmpStubIssue.Scenario2_WrongBase.ItemsPanel"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ListView Name="listView"
+              x:FieldModifier="public" />
+</Grid>
