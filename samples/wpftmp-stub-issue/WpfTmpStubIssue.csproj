@@ -6,13 +6,26 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <!--
-      Regression test: build both targets and compare outcomes.
-        net10.0-windows  →  PASSES  (no GenerateTemporaryTargetAssembly on modern .NET)
-        net48            →  FAILS   (GenerateTemporaryTargetAssembly + _wpftmp gap)
+      Regression test demonstrating the _wpftmp stub gap with WXSG.
 
-      The net10.0-windows pass proves the XAML/WXSG content itself is correct.
-      The net48 failure proves the _wpftmp stub issue is a .NET Framework-only problem.
-      This is the intended steady state: WXSG does not support .NET Framework.
+      Themes/Generic.xaml is a classless resource dictionary that references the
+      local type MyControl via {x:Type local:MyControl}.  This is the same pattern
+      used in real WPF projects such as SharpDevelop's AvalonEdit AddIn.
+
+      When MarkupCompilePass1 encounters the local type reference it cannot resolve,
+      it defers to MarkupCompilePass2.  MarkupCompilePass2 invokes
+      GenerateTemporaryTargetAssembly (_wpftmp), which compiles all user .cs sources
+      in a temporary project — WITHOUT Roslyn source generators (WXSG).
+
+      Because WXSG source generator output is absent in _wpftmp, code-behind files
+      fail:
+        CS0115 — MyControl.xaml.cs: override with no base type
+        (and potentially CS1061, CS0019, CS1977 for the other scenarios)
+
+      This failure occurs on ALL target frameworks (net10.0-windows and net48).
+      GenerateTemporaryTargetAssembly is not .NET-Framework-only; it exists in the
+      modern .NET WPF SDK too and triggers whenever local types appear in classless
+      XAML resource dictionaries.
     -->
     <TargetFrameworks>net10.0-windows;net48</TargetFrameworks>
     <UseWPF>true</UseWPF>
@@ -26,6 +39,12 @@
     -->
     <GenerateTemporaryTargetAssemblyDebuggingInformation>true</GenerateTemporaryTargetAssemblyDebuggingInformation>
   </PropertyGroup>
+
+  <!-- Stub files under generated-stubs/ are documentation only — not compiled in the main build. -->
+  <ItemGroup>
+    <Compile Remove="generated-stubs\**\*.cs" />
+    <None Include="generated-stubs\**\*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\XamlToCSharpGenerator.Generator.WPF\XamlToCSharpGenerator.Generator.WPF.csproj"

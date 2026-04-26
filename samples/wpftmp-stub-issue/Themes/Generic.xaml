@@ -1,0 +1,30 @@
+<!--
+  Classless resource dictionary that references a local type.
+  This is the pattern found in real WPF projects (e.g. SharpDevelop's
+  ICSharpCode.AvalonEdit.AddIn/Themes/generic.xaml which uses
+  {x:Type local:SharpDevelopTextEditor}).
+
+  When WPF's MarkupCompilePass1 encounters {x:Type local:MyControl}, it cannot
+  resolve the local type from already-compiled assemblies, so it defers the file
+  to MarkupCompilePass2.  MarkupCompilePass2 invokes GenerateTemporaryTargetAssembly
+  (_wpftmp): a temporary project is created from all user .cs sources, compiled
+  WITHOUT the Roslyn source generators (WXSG), and the resulting assembly is fed
+  to Pass2 for type resolution.
+
+  Because WXSG source generator output (.wpf.g.cs files) is not available in the
+  _wpftmp compilation, any code-behind that references InitializeComponent() or
+  x:Name fields produced by WXSG will fail with:
+    CS0115 — override with no matching base  (Scenario1: MyControl.xaml.cs)
+    CS1061 — member not found               (Scenario2: PanelHost uses ItemsPanel.Children)
+    CS0019/CS1977 — dynamic event binding   (Scenario3: dynamic x:Name field)
+
+  This failure occurs on ALL target frameworks — GenerateTemporaryTargetAssembly
+  is present in both .NET Framework (net48) and modern .NET (net10.0-windows) WPF.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase">
+    <Style TargetType="{x:Type local:MyControl}">
+        <Setter Property="Background" Value="White" />
+    </Style>
+</ResourceDictionary>

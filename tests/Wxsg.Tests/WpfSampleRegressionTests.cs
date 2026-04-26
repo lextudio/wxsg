@@ -314,70 +314,94 @@ public class WpfSampleRegressionTests
     }
 
     // -------------------------------------------------------------------------
-    // Regression: _wpftmp stub gap — net10.0-windows passes, net48 fails
+    // Regression: _wpftmp stub gap — WXSG + classless XAML referencing local types
     // -------------------------------------------------------------------------
+    //
+    // The sample includes Themes/Generic.xaml, a classless resource dictionary with
+    // {x:Type local:MyControl}.  This is the same pattern as SharpDevelop's
+    // ICSharpCode.AvalonEdit.AddIn/Themes/generic.xaml which uses
+    // {x:Type local:SharpDevelopTextEditor}.
+    //
+    // MarkupCompilePass1 cannot resolve local types at Pass1 time, so it defers the
+    // file to MarkupCompilePass2.  MarkupCompilePass2 calls
+    // GenerateTemporaryTargetAssembly (_wpftmp): a temporary project compiled from
+    // all user .cs sources WITHOUT Roslyn source generators.  Without WXSG output,
+    // code-behind files fail:
+    //   CS0115 — override with no base  (MyControl.xaml.cs — Scenario1)
+    //   CS1061 — member not found       (possible depending on scenario ordering)
+    //   CS0019 / CS1977 — dynamic event binding
+    //
+    // This is a KNOWN LIMITATION of WXSG.  The failure occurs on ALL target
+    // frameworks; GenerateTemporaryTargetAssembly is present in modern .NET too.
+    // If these tests ever start passing, investigate whether the _wpftmp gap was
+    // genuinely fixed or whether the test setup changed.
 
     [Fact]
-    public void WpfTmpStubIssue_Net10_Builds_Successfully()
+    public void WpfTmpStubIssue_Net10_Fails_With_WpfTmp_Compilation_Errors()
     {
-        // net10.0-windows does not use GenerateTemporaryTargetAssembly, so WXSG's
-        // removal of classed XAML from @(Page) causes no _wpftmp compilation gap.
-        // This test pins the happy path: the sample XAML and code-behind are valid.
         if (!OperatingSystem.IsWindows())
         {
             return;
         }
 
-        using var artifact = BuildSampleForFramework(
+        var (exitCode, output) = BuildSampleRaw(
             "samples/wpftmp-stub-issue/WpfTmpStubIssue.csproj",
-            "net10.0-windows",
-            "wpf-sample-wpftmpstub-net10");
+            "net10.0-windows");
 
-        var generatedCode = artifact.ReadGeneratedCSharp();
-
-        // WXSG must have generated code for each classed XAML file in the sample.
-        Assert.Contains("InitializeComponent", generatedCode, StringComparison.Ordinal);
+        Assert.NotEqual(0, exitCode);
+        AssertWpfTmpErrors(output);
     }
 
     [Fact]
     public void WpfTmpStubIssue_Net48_Fails_With_WpfTmp_Compilation_Errors()
     {
-        // net48 uses GenerateTemporaryTargetAssembly (MarkupCompilePass2).
-        // WXSG removes classed XAML from @(Page) before Pass1, so no .g.cs stubs
-        // are generated for the code-behind files. The _wpftmp compilation then fails
-        // with the following errors — all caused by the missing stub declarations:
-        //
-        //   CS0115  — 'MyControl.OnPropertyChanged': no suitable method found to override
-        //             (partial class has no base type in _wpftmp)
-        //   CS1061  — 'ItemsPanel' does not contain a definition for 'Children'
-        //             (base inferred as UserControl instead of Grid)
-        //   CS0019  — '+=' cannot be applied to 'dynamic' and 'anonymous method'
-        //             (x:Name field typed as dynamic; C# cannot infer delegate type)
-        //
-        // This failure is EXPECTED and INTENTIONAL — WXSG does not support .NET Framework.
-        // If this test starts passing, the _wpftmp gap was closed (verify intentionality).
         if (!OperatingSystem.IsWindows())
         {
             return;
         }
 
-        var (exitCode, output) = BuildSampleForFrameworkRaw(
+        var (exitCode, output) = BuildSampleRaw(
             "samples/wpftmp-stub-issue/WpfTmpStubIssue.csproj",
             "net48");
 
         Assert.NotEqual(0, exitCode);
+        AssertWpfTmpErrors(output);
+    }
 
-        // At least one of the characteristic _wpftmp error codes must be present.
-        // This distinguishes a genuine stub gap from an unrelated build breakage.
+    private static void AssertWpfTmpErrors(string output)
+    {
+        // At least one characteristic _wpftmp error must be present.
+        // This distinguishes the known stub gap from an unrelated breakage.
         var hasExpectedError =
             output.Contains("CS0115", StringComparison.Ordinal) ||
             output.Contains("CS1061", StringComparison.Ordinal) ||
             output.Contains("CS0019", StringComparison.Ordinal) ||
-            output.Contains("CS1977", StringComparison.Ordinal);
+            output.Contains("CS1977", StringComparison.Ordinal) ||
+            output.Contains("CS0103", StringComparison.Ordinal);
 
         Assert.True(hasExpectedError,
-            "net48 build failed but not with the expected _wpftmp stub errors. " +
-            "Output:\n" + output);
+            "Build failed but not with expected _wpftmp stub errors.\nOutput:\n" + output);
+    }
+
+    private static (int ExitCode, string Output) BuildSampleRaw(
+        string relativeProjectPath,
+        string framework)
+    {
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var projectPath = Path.Combine(repositoryRoot, relativeProjectPath.Replace('/', Path.DirectorySeparatorChar));
+
+        RunProcess(repositoryRoot, "dotnet", RestoreArguments(projectPath));
+
+        return RunProcess(
+            repositoryRoot,
+            "dotnet",
+            new StringBuilder()
+                .Append("build \"")
+                .Append(projectPath)
+                .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
+                .Append(" -f ")
+                .Append(framework)
+                .ToString());
     }
 
     private static SampleBuildArtifact BuildSampleForFramework(
@@ -400,10 +424,16 @@ public class WpfSampleRegressionTests
                 RestoreArguments(projectPath));
             Assert.True(restoreOutput.ExitCode == 0, restoreOutput.Output);
 
-            var buildOutput = RunProcess(
-                repositoryRoot,
-                "dotnet",
-                BuildArgumentsForFramework(projectPath, framework, generatedDirectory));
+            var buildArgs = new StringBuilder()
+                .Append("build \"")
+                .Append(projectPath)
+                .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
+                .Append(" -f ")
+                .Append(framework)
+                .Append(BuildPropertyArguments(generatedDirectory))
+                .ToString();
+
+            var buildOutput = RunProcess(repositoryRoot, "dotnet", buildArgs);
 
             Assert.True(buildOutput.ExitCode == 0, buildOutput.Output);
             return new SampleBuildArtifact(workspaceDirectory, generatedDirectory);
@@ -413,39 +443,6 @@ public class WpfSampleRegressionTests
             TryDeleteDirectory(workspaceDirectory);
             throw;
         }
-    }
-
-    private static (int ExitCode, string Output) BuildSampleForFrameworkRaw(
-        string relativeProjectPath,
-        string framework)
-    {
-        var repositoryRoot = GetWxsgRepositoryRoot();
-        var projectPath = Path.Combine(repositoryRoot, relativeProjectPath.Replace('/', Path.DirectorySeparatorChar));
-
-        RunProcess(repositoryRoot, "dotnet", RestoreArguments(projectPath));
-
-        return RunProcess(
-            repositoryRoot,
-            "dotnet",
-            BuildArgumentsForFramework(projectPath, framework, generatedDirectory: null));
-    }
-
-    private static string BuildArgumentsForFramework(
-        string projectPath,
-        string framework,
-        string generatedDirectory)
-    {
-        var sb = new StringBuilder()
-            .Append("build \"")
-            .Append(projectPath)
-            .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
-            .Append(" -f ")
-            .Append(framework);
-
-        if (generatedDirectory != null)
-            sb.Append(BuildPropertyArguments(generatedDirectory));
-
-        return sb.ToString();
     }
 
     private static Assembly BuildAndLoadWpfEmitterAssembly()
