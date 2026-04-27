@@ -132,6 +132,10 @@
           BeforeTargets="MarkupCompilePass1;GenerateMSBuildEditorConfigFileShouldRun"
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
 
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgPrepareXamlCSharp: project=$(MSBuildProjectName) tfm=$(TargetFramework) lang=$(Language) ext=$(MSBuildProjectExtension) CSharpMode=$(WpfXsgCSharpMode)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
+
     <!--
       Remove stale BAML files for CLASSED pages only (those moved out of Page below).
       We KEEP classless pages in Page so MarkupCompilePass1 produces fresh BAML for them.
@@ -142,6 +146,10 @@
       <_WxsgClasslessPage Include="@(Page)"
         Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
     </ItemGroup>
+
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgPrepareXamlCSharp: classed-pages=@(_WxsgClassedPage) classless-pages=@(_WxsgClasslessPage)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
 
     <Delete Files="@(_WxsgClassedPage -> '$(IntermediateOutputPath)%(RelativeDir)%(Filename).baml')"
             ContinueOnError="true" />
@@ -238,6 +246,9 @@
 
     <Message Importance="Low"
              Text="WXSG: deferring classless page to post-CoreCompile BAML: %(_WxsgDeferredClasslessPage.Identity)" />
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgPrepareXamlCSharp: deferred-classless=@(_WxsgDeferredClasslessPage)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
   </Target>
 
   <Target Name="_WxsgPrepareXamlVisualBasic"
@@ -886,9 +897,20 @@
           AfterTargets="CoreCompile"
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and '@(_WxsgDeferredClasslessPage)' != '' and !$(MSBuildProjectName.Contains('_wpftmp'))">
 
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: starting post-CoreCompile BAML bypass for project=$(MSBuildProjectName)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: deferred-classless-pages=@(_WxsgDeferredClasslessPage)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
+
     <WxsgWriteLrefFile
         LocalMarkupPages="@(_WxsgDeferredClasslessPage)"
         OutputFile="$(IntermediateOutputPath)$(AssemblyName)_MarkupCompile.lref" />
+
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: wrote lref to $(IntermediateOutputPath)$(AssemblyName)_MarkupCompile.lref"
+             Condition="'$(WXSG_DEBUG)' != ''" />
 
     <!-- After CoreCompile the assembly lives in IntermediateOutputPath, not TargetPath yet
          (CopyFilesToOutputDirectory hasn't run). Add it so Pass2 can resolve local types. -->
@@ -901,12 +923,23 @@
                             Condition="$([System.IO.File]::Exists('$(_WxsgCompiledAssemblyPath)'))" />
     </ItemGroup>
 
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: compiled-assembly=$(_WxsgCompiledAssemblyPath) exists=$([System.IO.File]::Exists('$(_WxsgCompiledAssemblyPath)'))"
+             Condition="'$(WXSG_DEBUG)' != ''" />
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: pass2-references=@(_WxsgPass2References)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
+
     <MarkupCompilePass2
         AssemblyName="$(AssemblyName)"
         Language="$(Language)"
         OutputPath="$(IntermediateOutputPath)"
         OutputType="$(OutputType)"
         References="@(_WxsgPass2References)" />
+
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: MarkupCompilePass2 completed"
+             Condition="'$(WXSG_DEBUG)' != ''" />
 
     <Message Importance="High"
              Text="WXSG BamlBypass: BAML generated for @(_WxsgDeferredClasslessPage). TODO: inject into assembly .g.resources." />

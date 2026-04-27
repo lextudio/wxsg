@@ -69,7 +69,8 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(classDeclaration);
         sb.AppendLine(indent + "{");
 
-        // Derived control DefaultStyleKey override
+        // Derived control DefaultStyleKey override — uses a static field initializer instead of a
+        // static constructor to avoid CS0111 when the code-behind already declares a static constructor.
         var rootTypeName = viewModel.RootObject.TypeName;
         if (!IsApplicationDefinition(viewModel) && !string.IsNullOrWhiteSpace(rootTypeName) && !string.IsNullOrWhiteSpace(doc.ClassFullName))
         {
@@ -79,12 +80,16 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
                 !string.Equals(normalizedRoot, doc.ClassFullName, StringComparison.Ordinal))
             {
                 sb.AppendLine();
-                sb.AppendLine(emitter.MemberIndent + "static " + className + "()");
+                sb.AppendLine(emitter.MemberIndent + "#pragma warning disable CA1823");
+                sb.AppendLine(emitter.MemberIndent + "private static readonly bool __WxsgDefaultStyleKeyInit = __WxsgOverrideDefaultStyleKey();");
+                sb.AppendLine(emitter.MemberIndent + "#pragma warning restore CA1823");
+                sb.AppendLine(emitter.MemberIndent + "private static bool __WxsgOverrideDefaultStyleKey()");
                 sb.AppendLine(emitter.MemberIndent + "{");
-                sb.AppendLine(emitter.MemberIndent + "    DefaultStyleKeyProperty.OverrideMetadata(");
+                sb.AppendLine(emitter.MemberIndent + "    global::System.Windows.FrameworkElement.DefaultStyleKeyProperty.OverrideMetadata(");
                 sb.AppendLine(emitter.MemberIndent + "        typeof(" + CodeGenUtilities.QualifyType(doc.ClassFullName) + "),");
                 sb.AppendLine(emitter.MemberIndent + "        new global::System.Windows.FrameworkPropertyMetadata(typeof(" + CodeGenUtilities.QualifyType(rootTypeName) + "))");
                 sb.AppendLine(emitter.MemberIndent + "    );");
+                sb.AppendLine(emitter.MemberIndent + "    return true;");
                 sb.AppendLine(emitter.MemberIndent + "}");
                 sb.AppendLine();
             }
