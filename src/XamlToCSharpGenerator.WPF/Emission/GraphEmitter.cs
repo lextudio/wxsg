@@ -515,6 +515,17 @@ internal sealed class GraphEmitter
             }
         }
 
+        // Check if the binder pre-encoded this as a UME (unknown markup extension)
+        if (CodeGenUtilities.TryParseUnknownMarkupExtensionEncoding(trimmedValue, out var umeData))
+        {
+            return "__WXSG_EvaluateUnknownMarkupExtension(" +
+                   CodeGenUtilities.EscapeStringLiteral(umeData.NsUri) + ", " +
+                   CodeGenUtilities.EscapeStringLiteral(umeData.LocalName) + ", " +
+                   CodeGenUtilities.BuildStringArrayExpression(umeData.PositionalArgs) + ", " +
+                   CodeGenUtilities.BuildStringArrayExpression(umeData.NamedArgKeys) + ", " +
+                   CodeGenUtilities.BuildStringArrayExpression(umeData.NamedArgValues) + ")";
+        }
+
         if (string.IsNullOrWhiteSpace(targetTypeName) ||
             targetTypeName.Equals("object", StringComparison.Ordinal) ||
             targetTypeName.Equals("System.Object", StringComparison.Ordinal))

@@ -33,8 +33,10 @@ internal static class MarkupExtensionResolver
                     return ("null", ResolvedValueKind.Literal);
                 // Detect {Binding ...} — keep the raw XAML string as ValueExpression so the emitter
                 // can parse it and emit a SetBinding call.
+                // Pre-process named args that are unknown markup extensions (e.g. Converter={ns:Foo})
+                // so the emitter can resolve them at runtime.
                 case XamlMarkupExtensionKind.Binding:
-                    return (rawValue, ResolvedValueKind.Binding);
+                    return (PreprocessBindingNamedArgs(rawValue, markupInfo, context), ResolvedValueKind.Binding);
                 // Detect {TemplateBinding ...} — keep the raw XAML string so the emitter can emit
                 // a SetBinding call with RelativeSource.TemplatedParent.
                 case XamlMarkupExtensionKind.TemplateBinding:
@@ -493,6 +495,25 @@ internal static class MarkupExtensionResolver
         // The emitter will parse this as: extract namespace from before ';', extract member from after final ':'
         resolvedExpr = AsStringLiteral($"{{x:Static clr-namespace:{namespaceName};assembly={assemblyName}:{resolvedType.Name}.{memberName}}}");
         return true;
+    }
+
+    private static string PreprocessBindingNamedArgs(string rawValue, MarkupExtensionInfo bindingInfo, BindingContext context)
+    {
+        var result = rawValue;
+        foreach (var kvp in bindingInfo.NamedArguments)
+        {
+            var argRaw = kvp.Value.Trim();
+            if (!MarkupParser.TryParseMarkupExtension(argRaw, out var nestedInfo))
+                continue;
+            if (XamlMarkupExtensionNameSemantics.Classify(nestedInfo.Name) != XamlMarkupExtensionKind.Unknown)
+                continue;
+            if (!TryBuildUnknownMarkupExtensionEncoding(nestedInfo, context, out var encoding))
+                continue;
+            // Replace the raw nested markup extension with the UME-encoded quoted string.
+            // The encoding is already a quoted string literal from AsStringLiteral.
+            result = result.Replace(argRaw, encoding);
+        }
+        return result;
     }
 
     internal static string AsStringLiteral(string value)
