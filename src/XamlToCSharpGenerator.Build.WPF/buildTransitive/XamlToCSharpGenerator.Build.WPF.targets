@@ -150,8 +150,14 @@
         Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
     </ItemGroup>
 
+    <!-- Capture as a property so it can be used safely in per-item batching conditions below. -->
+    <PropertyGroup>
+      <_WxsgHasClassedPages Condition="'@(_WxsgClassedPage)' != ''">true</_WxsgHasClassedPages>
+      <_WxsgHasClassedPages Condition="'$(_WxsgHasClassedPages)' == ''">false</_WxsgHasClassedPages>
+    </PropertyGroup>
+
     <Message Importance="High"
-             Text="[WXSG_DEBUG] _WxsgPrepareXamlCSharp: classed-pages=@(_WxsgClassedPage) classless-pages=@(_WxsgClasslessPage)"
+             Text="[WXSG_DEBUG] _WxsgPrepareXamlCSharp: classed-pages=@(_WxsgClassedPage) classless-pages=@(_WxsgClasslessPage) has-classed=$(_WxsgHasClassedPages)"
              Condition="'$(WXSG_DEBUG)' != ''" />
 
     <Delete Files="@(_WxsgClassedPage -> '$(IntermediateOutputPath)%(RelativeDir)%(Filename).baml')"
@@ -246,13 +252,36 @@
         and-egg: the assembly is already sealed by CoreCompile).
       -->
       <_WxsgDeferredClasslessPage Include="@(_WxsgClasslessPage)"
-        Condition="'@(_WxsgClassedPage)' != '' and
+        Condition="'$(_WxsgHasClassedPages)' == 'true' and
                    '%(FullPath)' != '' and
                    $([System.IO.File]::Exists('%(FullPath)')) and
                    $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(FullPath)')), 'clr-namespace:(?![^;]*;assembly=)'))" />
 
       <Page Remove="@(_WxsgDeferredClasslessPage)" />
       <None Include="@(_WxsgDeferredClasslessPage)" />
+    </ItemGroup>
+
+    <!--
+      Deferred classless pages must also be embedded as raw XAML Resource items so that
+      __WxsgThemeLoader can load them via pack URI at runtime (Application.GetResourceStream).
+      Without this, generic.xaml and similar theme files are in None only, their pack URIs
+      don't resolve, and controls lose their ControlTemplates/styles at runtime.
+      WxsgStripXSharedFromXaml handles two transformations required for raw-XAML embedding:
+        1. Strips x:Shared (BAML-only attribute rejected by the raw XAML parser)
+        2. Adds assembly= to bare clr-namespace: xmlns so the runtime XAML parser can
+           resolve types without compiler context.
+    -->
+    <WxsgStripXSharedFromXaml
+        InputFiles="@(_WxsgDeferredClasslessPage)"
+        OutputDirectory="$(IntermediateOutputPath)wxsg\raw-deferred"
+        ProjectDirectory="$(MSBuildProjectDirectory)"
+        AssemblyName="$(AssemblyName)"
+        Condition="'@(_WxsgDeferredClasslessPage)' != ''">
+      <Output TaskParameter="StrippedFiles" ItemName="_WxsgEmbeddedDeferredClasslessPage" />
+    </WxsgStripXSharedFromXaml>
+
+    <ItemGroup>
+      <Resource Include="@(_WxsgEmbeddedDeferredClasslessPage)" KeepDuplicates="false" />
     </ItemGroup>
 
     <Message Importance="Low"
