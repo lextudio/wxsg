@@ -116,6 +116,9 @@
   <Target Name="_WxsgEnsureLangVersion9"
           BeforeTargets="CoreCompile"
           Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'C#'">
+    <Message Importance="High"
+             Text="[WXSG_DEBUG] _WxsgEnsureLangVersion9: LangVersion=$(LangVersion) Language=$(Language) CSharpMode=$(WpfXsgCSharpMode) LanguageSupported=$(WpfXsgLanguageSupported)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
     <PropertyGroup>
       <LangVersion Condition="'$(LangVersion)' == '' or '$(LangVersion)' == '7' or '$(LangVersion)' == '7.0' or '$(LangVersion)' == '7.1' or '$(LangVersion)' == '7.2' or '$(LangVersion)' == '7.3' or '$(LangVersion)' == '8' or '$(LangVersion)' == '8.0'">9.0</LangVersion>
       <!--

@@ -107,6 +107,9 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(emitter.MemberIndent + "private int __WXSG_HOT_RELOAD__;");
         sb.AppendLine(emitter.MemberIndent + "private bool _contentLoaded;");
         sb.AppendLine(emitter.MemberIndent + "partial void __WxsgApplyPoweredByAttribution();");
+        sb.AppendLine(emitter.MemberIndent + "private static readonly bool __wxsg_debug_rt = global::System.Environment.GetEnvironmentVariable(\"WXSG_DEBUG\") != null;");
+        sb.AppendLine(emitter.MemberIndent + "private static readonly string __wxsg_log_rt = global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), \"wxsg_rt.log\");");
+        sb.AppendLine(emitter.MemberIndent + "private static void __WxsgTrace(string msg) { if (__wxsg_debug_rt) try { global::System.IO.File.AppendAllText(__wxsg_log_rt, msg + \"\\n\"); } catch { } }");
         sb.AppendLine();
 
         string? startupWindowType = null;
@@ -149,9 +152,15 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "[global::System.CodeDom.Compiler.GeneratedCode(\"" + GeneratorName + "\", \"" + GeneratorVersion + "\")]" );
         sb.AppendLine(i + "public void InitializeComponent()");
         sb.AppendLine(i + "{");
-        sb.AppendLine(i + "    if (_contentLoaded) return;");
+        // Guard on __WXSG_HOT_RELOAD__ rather than _contentLoaded so that user code patterns
+        // like SpecialInitializeComponent() — which pre-set _contentLoaded = true before calling
+        // Application.LoadComponent and then call InitializeComponent() — don't prevent WXSG's
+        // object-graph build from running.  _contentLoaded is still set for WPF infrastructure
+        // compatibility; __WXSG_HOT_RELOAD__ is WXSG's own idempotency sentinel.
+        sb.AppendLine(i + "    if (__WXSG_HOT_RELOAD__ > 0) return;");
         sb.AppendLine(i + "    _contentLoaded = true;");
         sb.AppendLine(i + "    __WXSG_HOT_RELOAD__++;");
+        sb.AppendLine(i + "    __WxsgTrace(\"[rt] InitializeComponent: \" + GetType().FullName);");
         sb.AppendLine(i);
         sb.AppendLine(i + "    // Phase 3: pure C# object-graph construction (no BAML LoadComponent).");
         sb.AppendLine(i + "    __WXSG_BuildObjectGraph();");
@@ -205,11 +214,15 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
         sb.AppendLine(i + "private void __WXSG_BuildObjectGraph()");
         sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    __WxsgTrace(\"[rt] BuildObjectGraph: begin \" + GetType().FullName + \" _contentLoaded=\" + _contentLoaded);");
         sb.AppendLine(i + "    var __root = this;");
         if (viewModel.NamedElements.Length > 0)
         {
-            sb.AppendLine(i + "    if (global::System.Windows.NameScope.GetNameScope(__root) == null)");
-            sb.AppendLine(i + "        global::System.Windows.NameScope.SetNameScope(__root, new global::System.Windows.NameScope());");
+            // Always replace the NameScope so that a prior Application.LoadComponent call
+            // (e.g. from SpecialInitializeComponent) doesn't leave stale name registrations
+            // that would cause RegisterName to throw when WXSG re-registers the same names.
+            sb.AppendLine(i + "    __WxsgTrace(\"[rt] BuildObjectGraph: resetting NameScope\");");
+            sb.AppendLine(i + "    global::System.Windows.NameScope.SetNameScope(__root, new global::System.Windows.NameScope());");
         }
         sb.AppendLine(i + "    var __previousRootResourceScope = __WXSG_CurrentRootResourceScope;");
         sb.AppendLine(i + "    __WXSG_CurrentRootResourceScope = __root;");
@@ -224,6 +237,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        __WXSG_CurrentRootResourceScope = __previousRootResourceScope;");
         sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    __WxsgTrace(\"[rt] BuildObjectGraph: done \" + GetType().FullName);");
         sb.AppendLine(i + "}");
         sb.AppendLine();
 
