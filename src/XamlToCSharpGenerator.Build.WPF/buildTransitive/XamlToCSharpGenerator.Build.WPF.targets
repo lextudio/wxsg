@@ -22,7 +22,7 @@
     Microsoft.CSharp.Core.targets has already set LangVersion = 7.3 for
     .NETFramework targets; our assignment here overrides that value.
   -->
-  <PropertyGroup Condition="'$(WpfXsgEnabled)' == 'true' and '$(Language)' == 'C#'">
+  <PropertyGroup Condition="'$(WpfXsgEnabled)' == 'true' and ('$(Language)' == 'C#' or '$(MSBuildProjectExtension)' == '.csproj')">
     <LangVersion Condition="'$(LangVersion)' == '' or '$(LangVersion)' == '7' or '$(LangVersion)' == '7.0' or '$(LangVersion)' == '7.1' or '$(LangVersion)' == '7.2' or '$(LangVersion)' == '7.3' or '$(LangVersion)' == '8' or '$(LangVersion)' == '8.0'">9.0</LangVersion>
   </PropertyGroup>
 
@@ -40,9 +40,11 @@
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'FSharp'">FSharp</WpfXsgTargetLanguageNormalized>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguageNormalized)' == ''">CSharp</WpfXsgTargetLanguageNormalized>
 
-    <WpfXsgCSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'CSharp' and '$(Language)' == 'C#'">true</WpfXsgCSharpMode>
-    <WpfXsgVisualBasicMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'VisualBasic' and '$(Language)' == 'VB'">true</WpfXsgVisualBasicMode>
-    <WpfXsgFSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'FSharp' and '$(Language)' == 'F#'">true</WpfXsgFSharpMode>
+    <!-- $(Language) is set by Microsoft.CSharp.targets which is imported via SDK.targets — after
+         this file. Fall back to $(MSBuildProjectExtension) which is always available. -->
+    <WpfXsgCSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'CSharp' and ('$(Language)' == 'C#' or '$(MSBuildProjectExtension)' == '.csproj')">true</WpfXsgCSharpMode>
+    <WpfXsgVisualBasicMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'VisualBasic' and ('$(Language)' == 'VB' or '$(MSBuildProjectExtension)' == '.vbproj')">true</WpfXsgVisualBasicMode>
+    <WpfXsgFSharpMode Condition="'$(WpfXsgTargetLanguageNormalized)' == 'FSharp' and ('$(Language)' == 'F#' or '$(MSBuildProjectExtension)' == '.fsproj')">true</WpfXsgFSharpMode>
 
     <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == '' and ('$(WpfXsgCSharpMode)' == 'true' or '$(WpfXsgVisualBasicMode)' == 'true' or '$(WpfXsgFSharpMode)' == 'true')">true</WpfXsgLanguageSupported>
     <WpfXsgLanguageSupported Condition="'$(WpfXsgLanguageSupported)' == ''">false</WpfXsgLanguageSupported>
@@ -211,13 +213,15 @@
       <Resource Include="@(_WxsgClassedPage)" KeepDuplicates="false" />
 
       <!--
-        BAML bypass: classless pages that contain {x:Type references to local types cannot
-        be processed by MarkupCompilePass1 without _wpftmp, and _wpftmp fails with WXSG
-        because WXSG source generator output is absent in that compilation.
+        BAML bypass: classless pages that reference local types cannot be processed by
+        MarkupCompilePass1 without _wpftmp, and _wpftmp fails with WXSG because WXSG
+        source generator output is absent in that compilation.
 
-        Detection heuristic: a classless page has local type refs if it contains both
-        {x:Type and clr-namespace: — the {x:Type triggers local-type resolution,
-        and clr-namespace: (without ;assembly=) indicates the namespace is local.
+        Detection heuristic: a classless page has local type refs if it contains
+        clr-namespace: without ;assembly= — this covers both {x:Type usage and direct
+        XML element usage of local types (e.g. xmlns:v="clr-namespace:Foo" followed by
+        <v:SomeLocalType/>).  A clr-namespace: with ;assembly= refers to an external
+        assembly and does not trigger _wpftmp, so such files are not deferred.
 
         We remove these from @(Page) so MarkupCompilePass1 never defers them, preventing
         _wpftmp from being invoked.  _WxsgBamlBypass runs post-CoreCompile to generate
@@ -226,7 +230,6 @@
       <_WxsgDeferredClasslessPage Include="@(_WxsgClasslessPage)"
         Condition="'%(FullPath)' != '' and
                    $([System.IO.File]::Exists('%(FullPath)')) and
-                   $([System.IO.File]::ReadAllText('%(FullPath)').Contains('{x:Type')) and
                    $([System.IO.File]::ReadAllText('%(FullPath)').Contains('clr-namespace:'))" />
 
       <Page Remove="@(_WxsgDeferredClasslessPage)" />
