@@ -238,10 +238,18 @@
         _wpftmp from being invoked.  _WxsgBamlBypass runs post-CoreCompile to generate
         their BAML using the real compiled assembly for type resolution.
       -->
+      <!--
+        Defer only when this project ALSO has classed pages.  For pure resource-dictionary
+        projects (no x:Class pages), _wpftmp works fine because WXSG generates no partial
+        classes that would be absent in the temp compilation.  Deferring unnecessarily in
+        those projects means _WxsgBamlBypass generates BAML but cannot embed it (chicken-
+        and-egg: the assembly is already sealed by CoreCompile).
+      -->
       <_WxsgDeferredClasslessPage Include="@(_WxsgClasslessPage)"
-        Condition="'%(FullPath)' != '' and
+        Condition="'@(_WxsgClassedPage)' != '' and
+                   '%(FullPath)' != '' and
                    $([System.IO.File]::Exists('%(FullPath)')) and
-                   $([System.IO.File]::ReadAllText('%(FullPath)').Contains('clr-namespace:'))" />
+                   $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(FullPath)')), 'clr-namespace:(?![^;]*;assembly=)'))" />
 
       <Page Remove="@(_WxsgDeferredClasslessPage)" />
       <None Include="@(_WxsgDeferredClasslessPage)" />
