@@ -345,10 +345,10 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "        var __afterPrefix = __memberToken.Substring(__clrNsIdx + 14); // len(\"clr-namespace:\") = 14");
         sb.AppendLine(i + "        var __assemblyIdx = __afterPrefix.IndexOf(';');");
         sb.AppendLine(i + "        var __typeIdx = __afterPrefix.LastIndexOf(':');");
-        sb.AppendLine(i + "        if (__typeIdx > __assemblyIdx && __assemblyIdx >= 0)");
+        sb.AppendLine(i + "        if (__typeIdx >= 0 && (__assemblyIdx < 0 || __typeIdx > __assemblyIdx))");
         sb.AppendLine(i + "        {");
-        sb.AppendLine(i + "            // Extract CLR namespace from: \"XStaticCustomNsSample;assembly=...\"");
-        sb.AppendLine(i + "            var __clrNamespace = __afterPrefix.Substring(0, __assemblyIdx).Trim();");
+        sb.AppendLine(i + "            // Extract CLR namespace; with assembly: \"NS;assembly=ASM:Type.Member\", without: \"NS:Type.Member\"");
+        sb.AppendLine(i + "            var __clrNamespace = (__assemblyIdx >= 0 ? __afterPrefix.Substring(0, __assemblyIdx) : __afterPrefix.Substring(0, __typeIdx)).Trim();");
         sb.AppendLine(i + "            var __qualifiedTypeName = __afterPrefix.Substring(__typeIdx + 1).Trim();");
         sb.AppendLine(i + "            var __qualifiedMemberDot = __qualifiedTypeName.LastIndexOf('.');");
         sb.AppendLine(i + "            if (__qualifiedMemberDot > 0 && __qualifiedMemberDot < __qualifiedTypeName.Length - 1)");
