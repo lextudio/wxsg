@@ -101,6 +101,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
         sb.AppendLine(emitter.MemberIndent + "private int __WXSG_HOT_RELOAD__;");
         sb.AppendLine(emitter.MemberIndent + "private bool _contentLoaded;");
+        sb.AppendLine(emitter.MemberIndent + "partial void __WxsgApplyPoweredByAttribution();");
         sb.AppendLine();
 
         string? startupWindowType = null;
@@ -149,6 +150,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i);
         sb.AppendLine(i + "    // Phase 3: pure C# object-graph construction (no BAML LoadComponent).");
         sb.AppendLine(i + "    __WXSG_BuildObjectGraph();");
+        sb.AppendLine(i + "    __WxsgApplyPoweredByAttribution();");
 
         // Runtime fallback: attempt to apply base control style if needed
         var rootType = viewModel.RootObject.TypeName;

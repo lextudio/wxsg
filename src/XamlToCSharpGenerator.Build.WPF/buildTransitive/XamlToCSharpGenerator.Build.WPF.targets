@@ -90,6 +90,7 @@
     <CompilerVisibleProperty Include="AvaloniaSourceGenGlobalXmlnsPrefixes" />
     <CompilerVisibleProperty Include="AvaloniaSourceGenInferClassFromPath" />
     <CompilerVisibleProperty Include="WpfXsgTargetLanguage" />
+    <CompilerVisibleProperty Include="WpfXsgAppendPoweredBy" />
   </ItemGroup>
 
   <!--

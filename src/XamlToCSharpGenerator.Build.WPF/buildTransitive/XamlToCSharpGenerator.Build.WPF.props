@@ -18,6 +18,12 @@
       Equivalent to setting EmitCompilerGeneratedFiles=true but scoped to WXSG projects.
     -->
     <WpfXsgEmitGeneratedFiles Condition="'$(WpfXsgEmitGeneratedFiles)' == ''">false</WpfXsgEmitGeneratedFiles>
+    
+    <!--
+      Append a small "(powered by WXSG)" suffix to the main window title by default.
+      Set to false in your project file to suppress this behavior.
+    -->
+    <WpfXsgAppendPoweredBy Condition="'$(WpfXsgAppendPoweredBy)' == ''">true</WpfXsgAppendPoweredBy>
 
   </PropertyGroup>
 
