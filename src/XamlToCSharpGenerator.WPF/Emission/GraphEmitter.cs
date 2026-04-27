@@ -605,18 +605,21 @@ internal sealed class GraphEmitter
         if (!string.IsNullOrWhiteSpace(rootNode.ContentPropertyName))
         {
             var contentPropertyName = rootNode.ContentPropertyName;
+            // "__self" means the root is itself the collection (e.g. ResourceDictionary implements IDictionary).
+            // In that case use "this" directly rather than "this.__self".
+            var contentPropertyAccess = contentPropertyName == "__self" ? "this" : "this." + contentPropertyName;
             switch (rootNode.ChildAttachmentMode)
             {
                 case ResolvedChildAttachmentMode.Content:
-                    Builder.AppendLine(MemberIndent + "    this." + contentPropertyName + " = null;");
-                    emittedMemberAccesses.Add("this." + contentPropertyName);
+                    Builder.AppendLine(MemberIndent + "    " + contentPropertyAccess + " = null;");
+                    emittedMemberAccesses.Add(contentPropertyAccess);
                     break;
                 case ResolvedChildAttachmentMode.ChildrenCollection:
                 case ResolvedChildAttachmentMode.ItemsCollection:
                 case ResolvedChildAttachmentMode.DirectAdd:
                 case ResolvedChildAttachmentMode.DictionaryAdd:
-                    Builder.AppendLine(MemberIndent + "    __WXSG_ClearCollectionLike(this." + contentPropertyName + ");");
-                    emittedMemberAccesses.Add("this." + contentPropertyName);
+                    Builder.AppendLine(MemberIndent + "    __WXSG_ClearCollectionLike(" + contentPropertyAccess + ");");
+                    emittedMemberAccesses.Add(contentPropertyAccess);
                     break;
             }
         }
