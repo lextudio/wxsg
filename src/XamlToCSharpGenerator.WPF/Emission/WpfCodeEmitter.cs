@@ -152,15 +152,24 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "[global::System.CodeDom.Compiler.GeneratedCode(\"" + GeneratorName + "\", \"" + GeneratorVersion + "\")]" );
         sb.AppendLine(i + "public void InitializeComponent()");
         sb.AppendLine(i + "{");
-        // Guard on __WXSG_HOT_RELOAD__ rather than _contentLoaded so that user code patterns
-        // like SpecialInitializeComponent() — which pre-set _contentLoaded = true before calling
-        // Application.LoadComponent and then call InitializeComponent() — don't prevent WXSG's
-        // object-graph build from running.  _contentLoaded is still set for WPF infrastructure
-        // compatibility; __WXSG_HOT_RELOAD__ is WXSG's own idempotency sentinel.
+        // Two-path initialization:
+        //   Normal path   (_contentLoaded == false): build visual tree from scratch in C#.
+        //   Pre-loaded path (_contentLoaded == true): Application.LoadComponent (e.g. via
+        //   SpecialInitializeComponent) already built the tree from the embedded raw XAML.
+        //   In that case skip rebuilding (avoids duplicate-key / already-has-parent errors)
+        //   and only wire up the named field references via FindName.
         sb.AppendLine(i + "    if (__WXSG_HOT_RELOAD__ > 0) return;");
+        sb.AppendLine(i + "    var __preLoaded = _contentLoaded;");
         sb.AppendLine(i + "    _contentLoaded = true;");
         sb.AppendLine(i + "    __WXSG_HOT_RELOAD__++;");
-        sb.AppendLine(i + "    __WxsgTrace(\"[rt] InitializeComponent: \" + GetType().FullName);");
+        sb.AppendLine(i + "    __WxsgTrace(\"[rt] InitializeComponent: \" + GetType().FullName + \" preLoaded=\" + __preLoaded);");
+        sb.AppendLine(i + "    if (__preLoaded)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        // Visual tree was already built by Application.LoadComponent; only wire fields.");
+        sb.AppendLine(i + "        __WXSG_AssignNamedFields();");
+        sb.AppendLine(i + "        __WxsgApplyPoweredByAttribution();");
+        sb.AppendLine(i + "        return;");
+        sb.AppendLine(i + "    }");
         sb.AppendLine(i);
         sb.AppendLine(i + "    // Phase 3: pure C# object-graph construction (no BAML LoadComponent).");
         sb.AppendLine(i + "    __WXSG_BuildObjectGraph();");
@@ -238,6 +247,21 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "        __WXSG_CurrentRootResourceScope = __previousRootResourceScope;");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "    __WxsgTrace(\"[rt] BuildObjectGraph: done \" + GetType().FullName);");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+
+        // Named field wiring path: used when Application.LoadComponent already built the tree.
+        // FindName resolves from the NameScope established by the XAML loader.
+        sb.AppendLine(i + "private void __WXSG_AssignNamedFields()");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    __WxsgTrace(\"[rt] AssignNamedFields: \" + GetType().FullName);");
+        foreach (var namedElement in viewModel.NamedElements)
+        {
+            var fieldName = CodeGenUtilities.EscapeIdentifier(namedElement.Name);
+            var typeName = CodeGenUtilities.QualifyType(namedElement.TypeName);
+            sb.AppendLine(i + "    this." + fieldName + " = FindName(" + CodeGenUtilities.EscapeStringLiteral(namedElement.Name) + ") as " + typeName + ";");
+            sb.AppendLine(i + "    __WxsgTrace(\"[rt] AssignNamedFields: " + namedElement.Name + "=\" + (this." + fieldName + " != null ? \"ok\" : \"NULL\"));");
+        }
         sb.AppendLine(i + "}");
         sb.AppendLine();
 
