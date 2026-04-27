@@ -14,6 +14,7 @@ internal static class RuntimeHelpersEmitter
         EmitSetterValueHelper(emitter);
         EmitUnknownMarkupExtensionHelper(emitter);
         EmitTrySetBindingHelper(emitter);
+        EmitWpfCommandResolver(emitter, docClassFullName);
     }
 
     private static void EmitTypeTokenHelper(GraphEmitter emitter)
@@ -714,6 +715,82 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "            return;");
         sb.AppendLine(i + "        }");
         sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "}");
+    }
+
+    private static void EmitWpfCommandResolver(GraphEmitter emitter, string? docClassFullName)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        // Resolves a Command attribute string value to an ICommand at runtime.
+        // Handles:
+        //   1. Short names like "New", "Open" -> ApplicationCommands.New, etc.
+        //   2. Namespace-prefixed static references like "Default:MainWindow.CloseAllCommand"
+        //      where the prefix is stripped and "Type.Member" is resolved via reflection.
+        sb.AppendLine();
+        sb.AppendLine(i + "private static global::System.Windows.Input.ICommand __WXSG_ResolveWpfCommand(string __name)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__name))");
+        sb.AppendLine(i + "        return null;");
+        sb.AppendLine(i + "    var __trimmed = __name.Trim();");
+        sb.AppendLine(i + "    // Strip XML namespace prefix (e.g. \"Default:Type.Member\" -> \"Type.Member\")");
+        sb.AppendLine(i + "    var __colonIdx = __trimmed.IndexOf(':');");
+        sb.AppendLine(i + "    if (__colonIdx >= 0 && __colonIdx < __trimmed.Length - 1)");
+        sb.AppendLine(i + "        __trimmed = __trimmed.Substring(__colonIdx + 1);");
+        sb.AppendLine(i + "    var __flags = global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy;");
+        sb.AppendLine(i + "    // Check well-known WPF command classes for a short name (e.g. \"New\" -> ApplicationCommands.New)");
+        sb.AppendLine(i + "    var __dot = __trimmed.IndexOf('.');");
+        sb.AppendLine(i + "    if (__dot < 0)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __cmdClasses = new global::System.Type[]");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            typeof(global::System.Windows.Input.ApplicationCommands),");
+        sb.AppendLine(i + "            typeof(global::System.Windows.Input.NavigationCommands),");
+        sb.AppendLine(i + "            typeof(global::System.Windows.Input.ComponentCommands),");
+        sb.AppendLine(i + "            typeof(global::System.Windows.Documents.EditingCommands),");
+        sb.AppendLine(i + "            typeof(global::System.Windows.Input.MediaCommands),");
+        sb.AppendLine(i + "        };");
+        sb.AppendLine(i + "        foreach (var __cls in __cmdClasses)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            var __prop = __cls.GetProperty(__trimmed, __flags);");
+        sb.AppendLine(i + "            if (__prop?.GetValue(null) is global::System.Windows.Input.ICommand __cmd)");
+        sb.AppendLine(i + "                return __cmd;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        // \"Type.Member\" format — search loaded assemblies for a matching type");
+        sb.AppendLine(i + "        var __typeName = __trimmed.Substring(0, __dot);");
+        sb.AppendLine(i + "        var __memberName = __trimmed.Substring(__dot + 1);");
+        if (!string.IsNullOrEmpty(docClassFullName))
+        {
+            sb.AppendLine(i + "        var __callingAsm = typeof(" + CodeGenUtilities.QualifyType(docClassFullName) + ").Assembly;");
+        }
+        else
+        {
+            sb.AppendLine(i + "        var __callingAsm = global::System.Reflection.Assembly.GetEntryAssembly() ?? typeof(global::System.Windows.Application).Assembly;");
+        }
+        sb.AppendLine(i + "        var __allAsms = global::System.AppDomain.CurrentDomain.GetAssemblies();");
+        sb.AppendLine(i + "        var __searchOrder = new global::System.Collections.Generic.List<global::System.Reflection.Assembly>();");
+        sb.AppendLine(i + "        __searchOrder.Add(__callingAsm);");
+        sb.AppendLine(i + "        foreach (var __a in __allAsms) { if (__a != __callingAsm) __searchOrder.Add(__a); }");
+        sb.AppendLine(i + "        foreach (var __asm in __searchOrder)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            global::System.Type[] __asmTypes;");
+        sb.AppendLine(i + "            try { __asmTypes = __asm.GetTypes(); }");
+        sb.AppendLine(i + "            catch (global::System.Reflection.ReflectionTypeLoadException __rtl) { __asmTypes = __rtl.Types; }");
+        sb.AppendLine(i + "            foreach (var __t in __asmTypes)");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                if (__t is null || __t.Name != __typeName) continue;");
+        sb.AppendLine(i + "                var __prop = __t.GetProperty(__memberName, __flags);");
+        sb.AppendLine(i + "                if (__prop?.GetValue(null) is global::System.Windows.Input.ICommand __cmd) return __cmd;");
+        sb.AppendLine(i + "                var __field = __t.GetField(__memberName, __flags);");
+        sb.AppendLine(i + "                if (__field?.GetValue(null) is global::System.Windows.Input.ICommand __cmdF) return __cmdF;");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve ICommand '\" + __name + \"'.\");");
         sb.AppendLine(i + "}");
     }
 }

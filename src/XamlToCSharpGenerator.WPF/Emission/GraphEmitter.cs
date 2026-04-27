@@ -1208,6 +1208,15 @@ internal sealed class GraphEmitter
             return childVariable + ".TargetType";
         }
 
+        // DataTemplate and HierarchicalDataTemplate without an explicit x:Key use
+        // DataTemplateKey(DataType) as their implicit ResourceDictionary key so that
+        // WPF's implicit data template lookup (which searches for DataTemplateKey) works.
+        var childTypeName = child.TypeName.Replace("global::", string.Empty);
+        if (childTypeName is "System.Windows.DataTemplate" or "System.Windows.HierarchicalDataTemplate")
+        {
+            return "new global::System.Windows.DataTemplateKey(" + childVariable + ".DataType)";
+        }
+
         return AsFallbackDictionaryKey(child);
     }
 

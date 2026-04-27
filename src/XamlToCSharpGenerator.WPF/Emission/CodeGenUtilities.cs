@@ -351,6 +351,14 @@ internal static class CodeGenUtilities
             }
         }
 
+        // ICommand: CommandConverter.ConvertFrom requires ITypeDescriptorContext to resolve
+        // short names (e.g. "New" -> ApplicationCommands.New) or prefix-qualified static refs
+        // (e.g. "Default:MainWindow.CloseAllCommand"). Use the runtime helper instead.
+        if (normalizedType is "System.Windows.Input.ICommand" or "Windows.Input.ICommand" or "ICommand")
+        {
+            return "__WXSG_ResolveWpfCommand(" + EscapeStringLiteral(literalValue) + ")";
+        }
+
         return ConvertViaTypeConverter(normalizedType, valueExpression);
     }
 
