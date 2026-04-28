@@ -686,6 +686,16 @@ internal sealed class GraphEmitter
                 continue;
             }
 
+            if (propertyElement.PropertyName.Equals("VisualTree", StringComparison.Ordinal) &&
+                propertyElement.ObjectValues.Length > 0)
+            {
+                var visualTreeFactory = EmitFrameworkElementFactoryTree(propertyElement.ObjectValues[0]);
+                Builder.AppendLine(
+                    MemberIndent + "    " +
+                    instanceVariable + ".VisualTree = " + visualTreeFactory + ";");
+                continue;
+            }
+
             var createdValues = new List<string>(propertyElement.ObjectValues.Length);
             foreach (var objectValue in propertyElement.ObjectValues)
             {
@@ -733,15 +743,6 @@ internal sealed class GraphEmitter
                 Builder.AppendLine(
                     MemberIndent + "    " +
                     instanceVariable + "." + propertyElement.PropertyName + " = " + createdValues[0] + ";");
-                continue;
-            }
-
-            if (propertyElement.PropertyName.Equals("VisualTree", StringComparison.Ordinal))
-            {
-                var visualTreeFactory = EmitFrameworkElementFactoryTree(propertyElement.ObjectValues[0]);
-                Builder.AppendLine(
-                    MemberIndent + "    " +
-                    instanceVariable + "." + propertyElement.PropertyName + " = " + visualTreeFactory + ";");
                 continue;
             }
 
@@ -885,8 +886,19 @@ internal sealed class GraphEmitter
             return;
         }
 
+        var contentProperty = node.ContentPropertyName;
         foreach (var child in node.Children)
         {
+            if (!string.IsNullOrWhiteSpace(contentProperty) &&
+                contentProperty.Equals("VisualTree", StringComparison.Ordinal))
+            {
+                var visualTreeFactory = EmitFrameworkElementFactoryTree(child);
+                Builder.AppendLine(
+                    MemberIndent + "    " +
+                    instanceVariable + ".VisualTree = " + visualTreeFactory + ";");
+                continue;
+            }
+
             var childVariable = EmitChildObjectCreation(
                 child,
                 ambientStyleTargetTypeExpression,
