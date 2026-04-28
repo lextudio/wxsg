@@ -61,9 +61,12 @@ namespace XamlToCSharpGenerator.Build.Tasks
                     "WxsgInjectBaml: injecting {0} BAML file(s) into '{1}' in '{2}'",
                     BamlFiles.Length, resourceName, Path.GetFileName(AssemblyPath));
 
-                // Read the assembly
+                // Read the assembly bytes into memory first so the file is not held open
+                // (PEReader keeps the stream open; we need to overwrite the file later)
+                var assemblyBytes = File.ReadAllBytes(AssemblyPath);
                 var reader = new MutableAssemblyReader();
-                var assembly = reader.Read(AssemblyPath, new MutableReaderParameters { ReadMethodBodies = false });
+                var assembly = reader.Read(new MemoryStream(assemblyBytes), new MutableReaderParameters { ReadMethodBodies = false });
+                assembly.MainModule.FileName = AssemblyPath;
                 var module = assembly.MainModule;
 
                 // Find the .g.resources embedded resource
@@ -168,8 +171,7 @@ namespace XamlToCSharpGenerator.Build.Tasks
             }
             catch (Exception ex)
             {
-                Log.LogError("WxsgInjectBaml: failed: {0}", ex.Message);
-                Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: stack trace: {0}", ex.ToString());
+                Log.LogError("WxsgInjectBaml: failed: {0}", ex.ToString());
                 return false;
             }
         }
