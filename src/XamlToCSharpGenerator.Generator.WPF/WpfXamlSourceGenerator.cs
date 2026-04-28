@@ -338,13 +338,23 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                 internal static class __WxsgClasslessXamlLoader
                 {
                     private const string CurrentAssemblyName = "{{escapedAssemblyName}}";
+                    private static bool __wxsg_debug => global::System.Environment.GetEnvironmentVariable("WXSG_DEBUG") != null;
+                    private static readonly string __wxsg_log =
+                        global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), "wxsg_classless_loader.log");
+                    private static void __wxsg_trace(string msg)
+                    {
+                        if (__wxsg_debug)
+                            try { global::System.IO.File.AppendAllText(__wxsg_log, msg + "\n"); } catch { }
+                    }
 
                     internal static global::System.Windows.ResourceDictionary LoadResourceDictionary(global::System.Uri uri)
                     {
                         var effectiveUri = NormalizeResourceUri(uri);
+                        __wxsg_trace($"[loader] LoadResourceDictionary: {effectiveUri}");
                         var resourceInfo = global::System.Windows.Application.GetResourceStream(effectiveUri);
                         if (resourceInfo?.Stream is null)
                         {
+                            __wxsg_trace($"[loader] no resource stream → Source= fallback: {effectiveUri}");
                             return new global::System.Windows.ResourceDictionary
                             {
                                 Source = effectiveUri
@@ -373,40 +383,24 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                         var trimmed = xaml.TrimStart();
                         if (trimmed.Length == 0 || trimmed[0] != '<')
                         {
+                            __wxsg_trace($"[loader] BAML/binary detected (first char=0x{(trimmed.Length > 0 ? ((int)trimmed[0]).ToString("X2") : "00")}) → Source= fallback: {effectiveUri}");
                             return new global::System.Windows.ResourceDictionary
                             {
                                 Source = effectiveUri
                             };
                         }
 
-                        var parserContext = CreateParserContext(effectiveUri, xaml);
-
-                        try
-                        {
-                            using var xamlStream = new global::System.IO.MemoryStream(
-                                global::System.Text.Encoding.UTF8.GetBytes(xaml));
-                            var __wxsg_obj = global::System.Windows.Markup.XamlReader.Load(
-                                xamlStream,
-                                parserContext);
-                            var __wxsg_rd = __wxsg_obj as global::System.Windows.ResourceDictionary;
-                            if (__wxsg_rd != null)
-                            {
-                                try { __wxsg_rd.Source = effectiveUri; } catch { }
-                                return __wxsg_rd;
-                            }
-
-                            return new global::System.Windows.ResourceDictionary { Source = effectiveUri };
-                        }
-                        catch
-                        {
-                            // If parsing fails at runtime (e.g. unresolved types or invalid characters),
-                            // fall back to letting WPF load the dictionary by Source so it can resolve
-                            // component-assembly mappings and handle BAML/fallback logic.
-                            return new global::System.Windows.ResourceDictionary
-                            {
-                                Source = effectiveUri
-                            };
-                        }
+                        // Raw XAML detected. Always let WPF load it natively via Source= so that
+                        // deferred ControlTemplate content (lazy XAML nodes) is stored with WPF's
+                        // own XamlSchemaContext. If we parse with a custom ParserContext here,
+                        // the deferred nodes end up with a foreign schema context that is
+                        // incompatible with WPF's XamlObjectWriter at template-apply time,
+                        // causing "Cannot create unknown type" for internal types like LinesRenderer.
+                        // The embedded raw XAML was preprocessed by WxsgStripXSharedFromXaml
+                        // (x:Shared stripped, assembly= added), so WPF's native loader can
+                        // parse it directly without a custom XamlTypeMapper.
+                        __wxsg_trace($"[loader] raw XAML detected → Source= native WPF load (deferred-template safe): {effectiveUri}");
+                        return new global::System.Windows.ResourceDictionary { Source = effectiveUri };
                     }
 
                     private static string RemoveInvalidXmlChars(string s)

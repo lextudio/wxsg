@@ -5,6 +5,7 @@
   <Project Path="../external/XamlToCSharpGenerator/src/XamlToCSharpGenerator.Framework.Abstractions/XamlToCSharpGenerator.Framework.Abstractions.csproj" />
   <Project Path="../external/XamlToCSharpGenerator/src/XamlToCSharpGenerator.MiniLanguageParsing/XamlToCSharpGenerator.MiniLanguageParsing.csproj" />
   <Project Path="XamlToCSharpGenerator.Generator.WPF/XamlToCSharpGenerator.Generator.WPF.csproj" />
+  <Project Path="XamlToCSharpGenerator.Build.Tasks/XamlToCSharpGenerator.Build.Tasks.csproj" />
   <Project Path="XamlToCSharpGenerator.Build.WPF/XamlToCSharpGenerator.Build.WPF.csproj" />
   <Project Path="XamlToCSharpGenerator.WPF/XamlToCSharpGenerator.WPF.csproj" />
   <Project Path="../tests/Wxsg.Tests/Wxsg.Tests.csproj" />

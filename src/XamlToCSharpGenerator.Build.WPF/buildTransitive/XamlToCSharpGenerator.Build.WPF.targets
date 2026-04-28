@@ -924,14 +924,18 @@
     </Task>
   </UsingTask>
 
+  <!-- Task that rewrites the compiled assembly to inject BAML into .g.resources -->
+  <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
+             AssemblyFile="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll"
+             Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll')" />
+
   <!--
     Post-CoreCompile BAML bypass: generate BAML for classless pages that were removed from
     @(Page) in _WxsgPrepareXamlCSharp to prevent _wpftmp from being triggered.
     MarkupCompilePass2 is invoked here with the real compiled assembly as the local-type
     reference, so {x:Type local:Foo} can be resolved without a temporary project.
-
-    TODO: inject the generated BAML into the assembly's .g.resources using
-    System.Reflection.Metadata so DefaultStyleKey lookups work at runtime.
+    WxsgInjectBamlTask then rewrites the assembly to embed the generated BAML into
+    the .g.resources manifest resource so WPF BAML template loading works at runtime.
   -->
   <Target Name="_WxsgBamlBypass"
           AfterTargets="CoreCompile"
@@ -948,10 +952,6 @@
         LocalMarkupPages="@(_WxsgDeferredClasslessPage)"
         OutputFile="$(IntermediateOutputPath)$(AssemblyName)_MarkupCompile.lref" />
 
-    <Message Importance="High"
-             Text="[WXSG_DEBUG] _WxsgBamlBypass: wrote lref to $(IntermediateOutputPath)$(AssemblyName)_MarkupCompile.lref"
-             Condition="'$(WXSG_DEBUG)' != ''" />
-
     <!-- After CoreCompile the assembly lives in IntermediateOutputPath, not TargetPath yet
          (CopyFilesToOutputDirectory hasn't run). Add it so Pass2 can resolve local types. -->
     <PropertyGroup>
@@ -964,10 +964,7 @@
     </ItemGroup>
 
     <Message Importance="High"
-             Text="[WXSG_DEBUG] _WxsgBamlBypass: compiled-assembly=$(_WxsgCompiledAssemblyPath) exists=$([System.IO.File]::Exists('$(_WxsgCompiledAssemblyPath)'))"
-             Condition="'$(WXSG_DEBUG)' != ''" />
-    <Message Importance="High"
-             Text="[WXSG_DEBUG] _WxsgBamlBypass: pass2-references=@(_WxsgPass2References)"
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: compiled-assembly=$(_WxsgCompiledAssemblyPath)"
              Condition="'$(WXSG_DEBUG)' != ''" />
 
     <MarkupCompilePass2
@@ -981,7 +978,25 @@
              Text="[WXSG_DEBUG] _WxsgBamlBypass: MarkupCompilePass2 completed"
              Condition="'$(WXSG_DEBUG)' != ''" />
 
+    <!-- Collect the BAML files produced by MarkupCompilePass2 for each deferred page -->
+    <ItemGroup>
+      <_WxsgGeneratedBaml Include="$(IntermediateOutputPath)%(  _WxsgDeferredClasslessPage.RecursiveDir)%(_WxsgDeferredClasslessPage.Filename).baml"
+                          Condition="$([System.IO.File]::Exists('$(IntermediateOutputPath)%(_WxsgDeferredClasslessPage.RecursiveDir)%(_WxsgDeferredClasslessPage.Filename).baml'))" />
+    </ItemGroup>
+
     <Message Importance="High"
-             Text="WXSG BamlBypass: BAML generated for @(_WxsgDeferredClasslessPage). TODO: inject into assembly .g.resources." />
+             Text="[WXSG_DEBUG] _WxsgBamlBypass: generated-baml=@(_WxsgGeneratedBaml)"
+             Condition="'$(WXSG_DEBUG)' != ''" />
+
+    <!-- Inject BAML into the compiled assembly's .g.resources -->
+    <XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask
+        AssemblyPath="$(_WxsgCompiledAssemblyPath)"
+        BamlFiles="@(_WxsgGeneratedBaml)"
+        AssemblyName="$(AssemblyName)"
+        ProjectDirectory="$(MSBuildProjectDirectory)"
+        Condition="'@(_WxsgGeneratedBaml)' != '' and $([System.IO.File]::Exists('$(_WxsgCompiledAssemblyPath)'))" />
+
+    <Message Importance="Normal"
+             Text="WXSG BamlBypass: injected BAML for @(_WxsgDeferredClasslessPage) into $(TargetFileName)." />
   </Target>
 </Project>
