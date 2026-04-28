@@ -65,7 +65,7 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 // (PEReader keeps the stream open; we need to overwrite the file later)
                 var assemblyBytes = File.ReadAllBytes(AssemblyPath);
                 var reader = new MutableAssemblyReader();
-                var assembly = reader.Read(new MemoryStream(assemblyBytes), new MutableReaderParameters { ReadMethodBodies = false });
+                var assembly = reader.Read(new MemoryStream(assemblyBytes), new MutableReaderParameters { ReadMethodBodies = true });
                 assembly.MainModule.FileName = AssemblyPath;
                 var module = assembly.MainModule;
 
@@ -156,13 +156,22 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 // Replace the resource data in the module
                 gResources.SetResourceData(updatedData);
 
-                // Rewrite the assembly in-place
-                var tempPath = AssemblyPath + ".wxsg.tmp";
-                var writer2 = new MutableAssemblyWriter(assembly);
-                writer2.Write(tempPath);
+                // Rewrite to a temp file in %TEMP% to avoid any directory-permission issues,
+                // then copy back over the original assembly.
+                var tempPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension(AssemblyPath) + ".wxsg.tmp");
+                try
+                {
+                    var writer2 = new MutableAssemblyWriter(assembly);
+                    writer2.Write(tempPath);
 
-                // Atomic replace
-                File.Move(tempPath, AssemblyPath, overwrite: true);
+                    // Overwrite the original assembly
+                    File.Copy(tempPath, AssemblyPath, overwrite: true);
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                        File.Delete(tempPath);
+                }
 
                 Log.LogMessage(MessageImportance.Normal,
                     "WxsgInjectBaml: assembly rewritten successfully with {0} BAML entries injected.",
