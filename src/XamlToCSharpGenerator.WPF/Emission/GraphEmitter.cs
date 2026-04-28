@@ -1044,8 +1044,8 @@ internal sealed class GraphEmitter
         if (!string.IsNullOrWhiteSpace(node.Name))
         {
             Builder.AppendLine(
-                MemberIndent + "    " + localVariable + ".SetValue(global::System.Windows.FrameworkElement.NameProperty, " +
-                CodeGenUtilities.EscapeStringLiteral(node.Name) + ");");
+                MemberIndent + "    " + localVariable + ".Name = " +
+                CodeGenUtilities.EscapeStringLiteral(node.Name) + ";");
         }
 
         EmitFrameworkElementFactoryPropertyAssignments(node, localVariable);
