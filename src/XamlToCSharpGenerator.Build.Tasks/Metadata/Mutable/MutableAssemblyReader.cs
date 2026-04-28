@@ -1619,12 +1619,20 @@ namespace Obfuscar.Metadata.Mutable
 
             public MutableTypeReference GetTypeFromDefinition(MetadataReader reader, TypeDefinitionHandle handle, byte rawTypeKind)
             {
-                return _reader.ReadTypeReference(handle);
+                var result = _reader.ReadTypeReference(handle);
+                // rawTypeKind 0x11 = ELEMENT_TYPE_VALUETYPE, 0x12 = ELEMENT_TYPE_CLASS.
+                // When explicitly present in the signature (non-zero), it is authoritative.
+                if (rawTypeKind != 0 && result != null)
+                    result.IsValueType = rawTypeKind == 0x11;
+                return result;
             }
 
             public MutableTypeReference GetTypeFromReference(MetadataReader reader, TypeReferenceHandle handle, byte rawTypeKind)
             {
-                return _reader.ReadTypeReference(handle);
+                var result = _reader.ReadTypeReference(handle);
+                if (rawTypeKind != 0 && result != null)
+                    result.IsValueType = rawTypeKind == 0x11;
+                return result;
             }
 
             public MutableTypeReference GetSZArrayType(MutableTypeReference elementType)
@@ -1890,7 +1898,11 @@ namespace Obfuscar.Metadata.Mutable
             {
                 var resolved = _typeResolver(handle);
                 if (resolved != null)
+                {
+                    if (rawTypeKind != 0)
+                        resolved.IsValueType = rawTypeKind == 0x11;
                     return resolved;
+                }
             }
 
             return CreateFromTypeDefinition(handle, rawTypeKind == 0x11);
@@ -1907,7 +1919,11 @@ namespace Obfuscar.Metadata.Mutable
             {
                 var resolved = _typeResolver(handle);
                 if (resolved != null)
+                {
+                    if (rawTypeKind != 0)
+                        resolved.IsValueType = rawTypeKind == 0x11;
                     return resolved;
+                }
             }
 
             return CreateFromTypeReference(handle, rawTypeKind == 0x11);

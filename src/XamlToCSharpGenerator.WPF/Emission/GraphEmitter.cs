@@ -13,6 +13,7 @@ internal sealed class GraphEmitter
 {
     private const string WpfFrameworkId = "WPF";
     private readonly Dictionary<string, string> _namedFieldTypes;
+    private readonly List<string> _deferredEventSubscriptions = new();
     private int _localCounter;
 
     public GraphEmitter(ResolvedViewModel viewModel, StringBuilder builder, string memberIndent)
@@ -845,10 +846,9 @@ internal sealed class GraphEmitter
         foreach (var subscription in node.EventSubscriptions)
         {
             if (string.IsNullOrWhiteSpace(subscription.HandlerMethodName))
-            {
                 continue;
-            }
 
+            string line;
             if (subscription.Kind == ResolvedEventSubscriptionKind.RoutedEvent &&
                 !string.IsNullOrWhiteSpace(subscription.RoutedEventOwnerTypeName) &&
                 !string.IsNullOrWhiteSpace(subscription.RoutedEventFieldName))
@@ -856,23 +856,31 @@ internal sealed class GraphEmitter
                 var handlerTypeName = string.IsNullOrWhiteSpace(subscription.RoutedEventHandlerTypeName)
                     ? "global::System.Windows.RoutedEventHandler"
                     : CodeGenUtilities.QualifyType(subscription.RoutedEventHandlerTypeName);
-                Builder.AppendLine(
-                    MemberIndent + "    " +
+                line = MemberIndent + "    " +
                     instanceVariable +
                     ".AddHandler(" +
                     CodeGenUtilities.QualifyType(subscription.RoutedEventOwnerTypeName) +
                     "." + subscription.RoutedEventFieldName +
                     ", new " + handlerTypeName + "(this." +
-                    subscription.HandlerMethodName + "));" );
-                continue;
+                    subscription.HandlerMethodName + "));";
+            }
+            else
+            {
+                line = MemberIndent + "    " +
+                    instanceVariable +
+                    "." + subscription.EventName +
+                    " += this." + subscription.HandlerMethodName + ";";
             }
 
-            Builder.AppendLine(
-                MemberIndent + "    " +
-                instanceVariable +
-                "." + subscription.EventName +
-                " += this." + subscription.HandlerMethodName + ";");
+            _deferredEventSubscriptions.Add(line);
         }
+    }
+
+    public void EmitDeferredEventSubscriptions()
+    {
+        foreach (var line in _deferredEventSubscriptions)
+            Builder.AppendLine(line);
+        _deferredEventSubscriptions.Clear();
     }
 
     private void EmitChildNodes(

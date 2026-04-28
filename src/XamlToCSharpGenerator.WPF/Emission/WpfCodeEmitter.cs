@@ -228,6 +228,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine(i + "    try");
         sb.AppendLine(i + "    {");
         emitter.EmitNodeInitialization(viewModel.RootObject, "__root", isRootNode: true, ambientStyleTargetTypeExpression: null);
+        emitter.EmitDeferredEventSubscriptions();
         sb.AppendLine(i + "        __rootInit?.EndInit();");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "    finally");
