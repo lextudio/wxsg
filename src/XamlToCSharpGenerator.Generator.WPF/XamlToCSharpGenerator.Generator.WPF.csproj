@@ -98,7 +98,7 @@
           Condition="Exists('..\\XamlToCSharpGenerator.Build.Tasks\\XamlToCSharpGenerator.Build.Tasks.csproj')">
     <MSBuild Projects="..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj"
              Targets="Build"
-             Properties="Configuration=$(Configuration);DesignTimeBuild=false;BuildingProject=false"
+             Properties="Configuration=$(Configuration)"
              StopOnFirstFailure="true" />
   </Target>
 </Project>
