@@ -78,4 +78,27 @@
     <None Include="$(OutputPath)XamlToCSharpGenerator.Framework.Abstractions.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
     <None Include="$(OutputPath)XamlToCSharpGenerator.MiniLanguageParsing.dll" Pack="true" PackagePath="analyzers/dotnet/vb" Visible="false" />
   </ItemGroup>
+
+  <!-- Include the built Build.Tasks assembly alongside the .targets in the package so the UsingTask can load it from the package at build time. -->
+  <ItemGroup>
+    <None Include="..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll"
+          Pack="true"
+          PackagePath="buildTransitive"
+          Visible="false"
+          Condition="Exists('..\\XamlToCSharpGenerator.Build.Tasks\\bin\\$(Configuration)\\net8.0\\XamlToCSharpGenerator.Build.Tasks.dll')" />
+    <None Include="..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.pdb"
+          Pack="true"
+          PackagePath="buildTransitive"
+          Visible="false"
+          Condition="Exists('..\\XamlToCSharpGenerator.Build.Tasks\\bin\\$(Configuration)\\net8.0\\XamlToCSharpGenerator.Build.Tasks.pdb')" />
+  </ItemGroup>
+
+  <!-- Ensure the Build.Tasks project is built when creating the NuGet package so the DLL exists to be packed. -->
+  <Target Name="BuildXamlToCSharpGeneratorBuildTasks" BeforeTargets="Pack"
+          Condition="Exists('..\\XamlToCSharpGenerator.Build.Tasks\\XamlToCSharpGenerator.Build.Tasks.csproj')">
+    <MSBuild Projects="..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration);DesignTimeBuild=false;BuildingProject=false"
+             StopOnFirstFailure="true" />
+  </Target>
 </Project>

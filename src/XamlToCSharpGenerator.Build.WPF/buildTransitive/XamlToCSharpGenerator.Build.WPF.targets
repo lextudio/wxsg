@@ -925,9 +925,15 @@
   </UsingTask>
 
   <!-- Task that rewrites the compiled assembly to inject BAML into .g.resources -->
-  <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
-             AssemblyFile="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll"
-             Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll')" />
+    <!-- Prefer the packaged tasks assembly placed alongside this targets file (buildTransitive),
+      otherwise fall back to the locally-built XamlToCSharpGenerator.Build.Tasks.dll. -->
+    <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
+         AssemblyFile="$(MSBuildThisFileDirectory)XamlToCSharpGenerator.Build.Tasks.dll"
+         Condition="Exists('$(MSBuildThisFileDirectory)XamlToCSharpGenerator.Build.Tasks.dll')" />
+
+    <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
+         AssemblyFile="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll"
+         Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll')" />
 
   <!--
     Post-CoreCompile BAML bypass: generate BAML for classless pages that were removed from
