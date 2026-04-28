@@ -126,13 +126,28 @@ internal sealed class GraphEmitter
                     dynResKeyExpression = "\"" + dynResKey.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
                 }
 
+                var dynResFrameworkOwner = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId);
+                var dynResDpOwner = !string.IsNullOrWhiteSpace(dynResFrameworkOwner)
+                    ? CodeGenUtilities.QualifyType(dynResFrameworkOwner) + "."
+                    : string.Empty;
+                var dynResDpExpr = dynResDpOwner + assignment.PropertyName + "Property";
+
                 if (string.Equals(instanceVariable, "this", StringComparison.Ordinal))
                 {
                     // Root object is always a FrameworkElement/FrameworkContentElement — use SetResourceReference.
                     Builder.AppendLine(
                         MemberIndent + "    " +
-                        "this.SetResourceReference(" +
-                        assignment.PropertyName + "Property, " + dynResKeyExpression + ");");
+                        "this.SetResourceReference(" + dynResDpExpr + ", " + dynResKeyExpression + ");");
+                }
+                else if (!string.IsNullOrWhiteSpace(dynResFrameworkOwner))
+                {
+                    // Attached property on non-root: use the owner type's static setter.
+                    var dynResTypeName = CodeGenUtilities.QualifyType(assignment.ClrPropertyTypeName ?? "object");
+                    Builder.AppendLine(
+                        MemberIndent + "    " +
+                        "{ var __dynResVal = global::System.Windows.Application.Current?.TryFindResource(" + dynResKeyExpression + "); " +
+                        "if (__dynResVal is " + dynResTypeName + " __dynResCast) " +
+                        CodeGenUtilities.QualifyType(dynResFrameworkOwner) + ".Set" + assignment.PropertyName + "(" + instanceVariable + ", __dynResCast); }");
                 }
                 else if (!string.IsNullOrWhiteSpace(assignment.ClrPropertyTypeName))
                 {
@@ -1201,6 +1216,20 @@ internal sealed class GraphEmitter
         if (string.IsNullOrWhiteSpace(ownerTypeName) || string.IsNullOrWhiteSpace(propertyName))
         {
             return null;
+        }
+
+        // Verify the DP backing field exists at generator time via reflection.
+        // If the property is a plain CLR property (no DependencyProperty field), skip it —
+        // FrameworkElementFactory.SetValue requires a real DP.
+        var runtimeType = CodeGenUtilities.ResolveRuntimeType(ownerTypeName);
+        if (runtimeType is not null)
+        {
+            var dpField = runtimeType.GetField(propertyName + "Property",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy);
+            if (dpField is null)
+            {
+                return null;
+            }
         }
 
         return CodeGenUtilities.QualifyType(ownerTypeName) + "." + propertyName + "Property";
