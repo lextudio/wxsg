@@ -980,7 +980,7 @@
 
     <!-- Collect the BAML files produced by MarkupCompilePass2 for each deferred page -->
     <ItemGroup>
-      <_WxsgGeneratedBaml Include="$(IntermediateOutputPath)%(  _WxsgDeferredClasslessPage.RecursiveDir)%(_WxsgDeferredClasslessPage.Filename).baml"
+      <_WxsgGeneratedBaml Include="$(IntermediateOutputPath)%(_WxsgDeferredClasslessPage.RecursiveDir)%(_WxsgDeferredClasslessPage.Filename).baml"
                           Condition="$([System.IO.File]::Exists('$(IntermediateOutputPath)%(_WxsgDeferredClasslessPage.RecursiveDir)%(_WxsgDeferredClasslessPage.Filename).baml'))" />
     </ItemGroup>
 
