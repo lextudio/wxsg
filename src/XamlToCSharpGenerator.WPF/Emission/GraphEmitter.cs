@@ -1076,11 +1076,13 @@ internal sealed class GraphEmitter
                 continue;
             }
 
+            var ownerTypeForDp = assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
+                                  assignment.ClrPropertyOwnerTypeName ??
+                                  node.TypeName;
             var dependencyPropertyExpression = TryBuildDependencyPropertyExpression(
-                assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
-                assignment.ClrPropertyOwnerTypeName ??
-                node.TypeName,
-                assignment.PropertyName);
+                ownerTypeForDp,
+                assignment.PropertyName,
+                out var dpRequiresRuntimeLookup);
 
             if (dependencyPropertyExpression is null)
             {
@@ -1088,9 +1090,7 @@ internal sealed class GraphEmitter
             }
 
             var assignmentTargetTypeName = CodeGenUtilities.ResolveFrameworkElementFactoryPropertyTypeName(
-                assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
-                assignment.ClrPropertyOwnerTypeName ??
-                node.TypeName,
+                ownerTypeForDp,
                 assignment.PropertyName,
                 assignment.ClrPropertyTypeName);
             var convertedValue = CodeGenUtilities.ConvertLiteralExpression(
@@ -1098,8 +1098,18 @@ internal sealed class GraphEmitter
                 assignmentTargetTypeName,
                 "null");
 
-            Builder.AppendLine(
-                MemberIndent + "    " + factoryVariable + ".SetValue(" + dependencyPropertyExpression + ", " + convertedValue + ");");
+            if (dpRequiresRuntimeLookup)
+            {
+                // The DP field existence cannot be verified at generator time — guard with null check.
+                var dpVarName = "__dp_" + _localCounter++;
+                Builder.AppendLine(MemberIndent + "    { var " + dpVarName + " = " + dependencyPropertyExpression + ";");
+                Builder.AppendLine(MemberIndent + "    if (" + dpVarName + " != null) " + factoryVariable + ".SetValue(" + dpVarName + ", " + convertedValue + "); }");
+            }
+            else
+            {
+                Builder.AppendLine(
+                    MemberIndent + "    " + factoryVariable + ".SetValue(" + dependencyPropertyExpression + ", " + convertedValue + ");");
+            };
         }
     }
 
@@ -1115,7 +1125,8 @@ internal sealed class GraphEmitter
         var dependencyPropertyExpression = TryBuildDependencyPropertyExpression(
             assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
             assignment.ClrPropertyOwnerTypeName,
-            assignment.PropertyName);
+            assignment.PropertyName,
+            out _);
         if (dependencyPropertyExpression is null)
         {
             return;
@@ -1181,7 +1192,8 @@ internal sealed class GraphEmitter
         var dependencyPropertyExpression = TryBuildDependencyPropertyExpression(
             assignment.GetFrameworkPropertyOwnerTypeName(WpfFrameworkId) ??
             assignment.ClrPropertyOwnerTypeName,
-            assignment.PropertyName);
+            assignment.PropertyName,
+            out _);
         if (dependencyPropertyExpression is null)
         {
             return;
@@ -1211,28 +1223,46 @@ internal sealed class GraphEmitter
             MemberIndent + "    " + factoryVariable + ".SetBinding(" + dependencyPropertyExpression + ", " + bindingCtor + ");");
     }
 
-    private static string? TryBuildDependencyPropertyExpression(string? ownerTypeName, string propertyName)
+    /// <summary>
+    /// Returns the compile-time DP expression (e.g. "Ns.Type.PropProperty") when the DP
+    /// backing field is confirmed to exist at generator time, null when it is confirmed to NOT
+    /// exist, or a runtime-reflection expression when the type is not loaded in the generator
+    /// process (so we fall back to a safe runtime lookup).
+    /// The out param <paramref name="requiresRuntimeLookup"/> is set when the returned string
+    /// is a runtime-reflection snippet rather than a direct field access.
+    /// </summary>
+    private static string? TryBuildDependencyPropertyExpression(
+        string? ownerTypeName,
+        string propertyName,
+        out bool requiresRuntimeLookup)
     {
+        requiresRuntimeLookup = false;
         if (string.IsNullOrWhiteSpace(ownerTypeName) || string.IsNullOrWhiteSpace(propertyName))
         {
             return null;
         }
 
-        // Verify the DP backing field exists at generator time via reflection.
-        // If the property is a plain CLR property (no DependencyProperty field), skip it —
-        // FrameworkElementFactory.SetValue requires a real DP.
         var runtimeType = CodeGenUtilities.ResolveRuntimeType(ownerTypeName);
         if (runtimeType is not null)
         {
+            // Type is available at generator time — do a definitive check.
             var dpField = runtimeType.GetField(propertyName + "Property",
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.FlattenHierarchy);
             if (dpField is null)
             {
+                // Confirmed non-DP property — skip.
                 return null;
             }
+            return CodeGenUtilities.QualifyType(ownerTypeName) + "." + propertyName + "Property";
         }
 
-        return CodeGenUtilities.QualifyType(ownerTypeName) + "." + propertyName + "Property";
+        // Type not available at generator time (e.g. it is defined in the project being compiled).
+        // Emit a runtime reflection lookup so we don't generate a compile error if the property
+        // turns out to be a plain CLR property.
+        requiresRuntimeLookup = true;
+        return "(global::System.Windows.DependencyProperty?)typeof(" +
+               CodeGenUtilities.QualifyType(ownerTypeName) + ").GetField(\"" + propertyName + "Property\", " +
+               "global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.FlattenHierarchy)?.GetValue(null)";
     }
 
     private static string BuildDictionaryKeyExpression(
