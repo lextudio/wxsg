@@ -250,6 +250,36 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
+    public void SimpleSampleCrashRepro_Runs_And_ReflectsCustomAttributeMetadata()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var projectPath = Path.Combine(
+            repositoryRoot,
+            "samples",
+            "simple-sample-crash-repro",
+            "SimpleSampleCrashRepro.csproj");
+
+        var restoreOutput = RunProcess(repositoryRoot, "dotnet", RestoreArguments(projectPath));
+        Assert.True(restoreOutput.ExitCode == 0, restoreOutput.Output);
+
+        var runOutput = RunProcess(
+            repositoryRoot,
+            "dotnet",
+            "run --project \"" + projectPath + "\" -c Debug --no-restore /nodeReuse:false --disable-build-servers");
+
+        Assert.Equal(0, runOutput.ExitCode);
+        Assert.Contains("OK: ExtensionForAttribute Type and Type[] metadata is reflectable.", runOutput.Output, StringComparison.Ordinal);
+        Assert.Contains("OK: SimpleSample-style designer load and toolbox selection completed without crashing.", runOutput.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain("CustomAttributeFormatException", runOutput.Output, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("NullReferenceException", runOutput.Output, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void AttachedProperty_UnqualifiedAttribute_Resolves_As_AttachedProperty()
     {
         if (!OperatingSystem.IsWindows())
