@@ -62,10 +62,6 @@ internal sealed class GraphEmitter
         EmitEventSubscriptions(node, instanceVariable);
         EmitChildNodes(node, instanceVariable, nextAmbientStyleTargetTypeExpression, nextSuppressNamedFieldRegistration);
 
-        if (isRootNode && !string.IsNullOrWhiteSpace(node.Name))
-        {
-            EmitNamedFieldAssignment(node, instanceVariable, suppressNamedFieldRegistration);
-        }
     }
 
     private void EmitNamedFieldAssignment(ResolvedObjectNode node, string instanceVariable, bool suppressNamedFieldRegistration)
