@@ -41,7 +41,6 @@ internal sealed class GraphEmitter
     public void EmitNodeInitialization(
         ResolvedObjectNode node,
         string instanceVariable,
-        bool isRootNode,
         string? ambientStyleTargetTypeExpression,
         bool suppressNamedFieldRegistration = false)
     {
@@ -957,7 +956,6 @@ internal sealed class GraphEmitter
         EmitNodeInitialization(
             child,
             localVariable,
-            isRootNode: false,
             ambientStyleTargetTypeExpression,
             suppressNamedFieldRegistration);
         Builder.AppendLine(MemberIndent + "    " + initVariable + "?.EndInit();");
