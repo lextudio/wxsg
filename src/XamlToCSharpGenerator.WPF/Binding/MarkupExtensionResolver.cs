@@ -276,7 +276,15 @@ internal static class MarkupExtensionResolver
         out string encoding)
     {
         encoding = string.Empty;
-
+        // Avoid emitting generator-only encodings into classless (raw) XAML documents.
+        // Classless documents are embedded as raw XAML and parsed by WPF at runtime;
+        // emitting a special generator encoding here would leak internal syntax into
+        // the raw XAML. Let the build-time preprocessor handle any assembly
+        // qualification for classless outputs.
+        if (!context.Document.IsClassBacked)
+        {
+            return false;
+        }
         var name = markupInfo.Name;
         var colonIndex = name.IndexOf(':');
         if (colonIndex <= 0 || colonIndex >= name.Length - 1)
@@ -331,6 +339,14 @@ internal static class MarkupExtensionResolver
         out string qualifiedExpr)
     {
         qualifiedExpr = string.Empty;
+
+        // Do not produce inline clr-namespace/assembly encodings for classless/raw XAML
+        // documents. Those files are intended to be loaded by WPF's native loader;
+        // injecting generator-specific encodings would create invalid XAML.
+        if (!context.Document.IsClassBacked)
+        {
+            return false;
+        }
 
         try
         {
@@ -499,6 +515,14 @@ internal static class MarkupExtensionResolver
 
     private static string PreprocessBindingNamedArgs(string rawValue, MarkupExtensionInfo bindingInfo, BindingContext context)
     {
+        // For classless (raw) XAML documents, avoid encoding nested unknown markup
+        // extensions. Preserve the original XAML so the runtime/native loader can
+        // parse it without generator encodings.
+        if (!context.Document.IsClassBacked)
+        {
+            return rawValue;
+        }
+
         var result = rawValue;
         foreach (var kvp in bindingInfo.NamedArguments)
         {
