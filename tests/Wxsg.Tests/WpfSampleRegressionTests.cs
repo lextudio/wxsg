@@ -404,6 +404,7 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
             "net10.0-windows");
 
         Assert.Equal(0, exitCode);
+        AssertRawDeferredXamlPreservesBareLocalClrNamespace("net10.0-windows");
     }
 
     [Fact]
@@ -419,6 +420,35 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
             "net48");
 
         Assert.Equal(0, exitCode);
+        AssertRawDeferredXamlPreservesBareLocalClrNamespace("net48");
+    }
+
+    private static void AssertRawDeferredXamlPreservesBareLocalClrNamespace(string framework)
+    {
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var rawDeferredXaml = Path.Combine(
+            repositoryRoot,
+            "samples",
+            "wpftmp-stub-issue",
+            "obj",
+            "Debug",
+            framework,
+            "wxsg",
+            "raw-deferred",
+            "Themes",
+            "Generic.xaml");
+
+        Assert.True(File.Exists(rawDeferredXaml), $"Expected raw deferred XAML at '{rawDeferredXaml}'.");
+
+        var content = File.ReadAllText(rawDeferredXaml);
+        Assert.Contains(
+            "xmlns:local=\"clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase\"",
+            content,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue",
+            content,
+            StringComparison.Ordinal);
     }
 
     private static (int ExitCode, string Output) BuildSampleRaw(

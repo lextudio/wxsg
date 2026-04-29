@@ -266,10 +266,8 @@
       __WxsgThemeLoader can load them via pack URI at runtime (Application.GetResourceStream).
       Without this, generic.xaml and similar theme files are in None only, their pack URIs
       don't resolve, and controls lose their ControlTemplates/styles at runtime.
-      WxsgStripXSharedFromXaml handles two transformations required for raw-XAML embedding:
-        1. Strips x:Shared (BAML-only attribute rejected by the raw XAML parser)
-        2. Adds assembly= to bare clr-namespace: xmlns so the runtime XAML parser can
-           resolve types without compiler context.
+      WxsgStripXSharedFromXaml strips x:Shared, a BAML-only attribute rejected by
+      the raw XAML parser.
     -->
     <WxsgStripXSharedFromXaml
         InputFiles="@(_WxsgDeferredClasslessPage)"
@@ -309,17 +307,16 @@
 
   <!--
     Inline MSBuild task: preprocesses each classless XAML file before it is embedded
-    as a raw resource.  Two transformations are applied:
+    as a raw resource.
 
-    1. Strip x:Shared attributes — valid only in compiled BAML; the raw-XAML parser
-       (used when WPF loads pack:// resources that are not BAML) rejects them with
-       "Shared attribute can be used only in compiled resource dictionaries."
+    Strip x:Shared attributes — valid only in compiled BAML; the raw-XAML parser
+    (used when WPF loads pack:// resources that are not BAML) rejects them with
+    "Shared attribute can be used only in compiled resource dictionaries."
 
-    2. Add assembly= to bare clr-namespace: xmlns declarations — in BAML the compiler
-       bakes the current assembly into the type table, so omitting assembly= is valid.
-       In raw XAML the parser has no such context and fails to resolve the type.
-       Adding assembly=$(AssemblyName) restores the correct runtime lookup without
-       modifying the source files.
+    Do not add assembly=$(AssemblyName) to bare same-assembly clr-namespace values.
+    WPF can instantiate internal same-assembly types from raw XAML only when the
+    namespace remains local; forcing an explicit assembly makes those types look
+    external and can fail with "Cannot create unknown type".
 
     The Link metadata is set so MSBuild embeds the processed copy under the same
     pack URI path as the original.
@@ -359,17 +356,6 @@
                     @"[ \t]*x:Shared\s*=\s*""[^""]*""",
                     string.Empty,
                     RegexOptions.IgnoreCase);
-
-                // 2. Add assembly= to bare clr-namespace: xmlns values.
-                //    Pattern: clr-namespace:X" where X contains no ';' (no assembly= yet).
-                //    In BAML the compiler supplies the assembly; in raw XAML we must be explicit.
-                if (!string.IsNullOrEmpty(AssemblyName))
-                {
-                    processed = Regex.Replace(
-                        processed,
-                        @"(clr-namespace:[^;""]+)""",
-                        "$1;assembly=" + AssemblyName + "\"");
-                }
 
                 // Determine the link path (relative to project dir) so the embedded
                 // resource gets the same name as the original file.
