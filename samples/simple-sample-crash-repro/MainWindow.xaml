@@ -3,6 +3,27 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:SimpleSampleCrashRepro"
         Title="SimpleSampleCrashRepro" Height="200" Width="400">
+    <Window.Resources>
+        <Style x:Key="FocusVisual">
+            <Setter Property="Control.Template">
+                <Setter.Value>
+                    <ControlTemplate>
+                        <Rectangle Margin="2"
+                                   SnapsToDevicePixels="true"
+                                   Stroke="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
+                                   StrokeThickness="1"
+                                   StrokeDashArray="1 2" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="negativeCheckbox" TargetType="{x:Type CheckBox}">
+            <Setter Property="FocusVisualStyle" Value="{StaticResource FocusVisual}" />
+            <Setter Property="BorderThickness" Value="1" />
+        </Style>
+    </Window.Resources>
+
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="120" />
@@ -24,6 +45,8 @@
 
         <StackPanel Grid.Column="2">
             <local:FakePropertyGridView x:Name="propertyGrid" />
+            <CheckBox x:Name="negativeCheckbox"
+                      Style="{StaticResource negativeCheckbox}" />
             <ComboBox x:Name="cmbFontFamily"
                       ItemsSource="{Binding Source={x:Static Member=Fonts.SystemFontFamilies}}" />
         </StackPanel>

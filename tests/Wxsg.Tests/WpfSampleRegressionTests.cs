@@ -298,6 +298,7 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         Assert.Contains("OK: ExtensionForAttribute Type and Type[] metadata is reflectable.", runOutput.Output, StringComparison.Ordinal);
         Assert.Contains("OK: SimpleSample-style classless designer resources loaded as BAML and merged into Application.Resources.", runOutput.Output, StringComparison.Ordinal);
         Assert.Contains("OK: x:Static Member=Fonts.SystemFontFamilies resolved for toolbar-style binding.", runOutput.Output, StringComparison.Ordinal);
+        Assert.Contains("OK: Setter.Value StaticResource resolved for FocusVisualStyle.", runOutput.Output, StringComparison.Ordinal);
         Assert.Contains("OK: SimpleSample-style designer load and toolbox selection completed without crashing.", runOutput.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("CustomAttributeFormatException", runOutput.Output, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NullReferenceException", runOutput.Output, StringComparison.OrdinalIgnoreCase);

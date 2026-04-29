@@ -250,25 +250,30 @@ internal static class CodeGenUtilities
             return "new global::System.Windows.DynamicResourceExtension(" + EscapeStringLiteral(dynKey) + ")";
         }
 
-        if (normalizedType == "string" || normalizedType == "System.String" || normalizedType == "object" || normalizedType == "System.Object")
-        {
-            return valueExpression;
-        }
-
         if (literalValue.StartsWith("{StaticResource ", StringComparison.Ordinal) &&
             literalValue.EndsWith("}", StringComparison.Ordinal))
         {
             var resourceScopeExpression = string.IsNullOrWhiteSpace(scopeExpression)
                 ? "global::System.Windows.Application.Current"
                 : scopeExpression;
-            return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveStaticResource(" +
-                   resourceScopeExpression + ", " + valueExpression + ")";
+            var callExpr = "__WXSG_ResolveStaticResource(" + resourceScopeExpression + ", " + valueExpression + ")";
+            return normalizedType == "object" || normalizedType == "System.Object"
+                ? callExpr
+                : "(" + QualifyType(normalizedType) + ")" + callExpr;
         }
 
         if (literalValue.StartsWith("{x:Static ", StringComparison.Ordinal) &&
             literalValue.EndsWith("}", StringComparison.Ordinal))
         {
-            return "(" + QualifyType(normalizedType) + ")__WXSG_ResolveXStatic(" + valueExpression + ")";
+            var callExpr = "__WXSG_ResolveXStatic(" + valueExpression + ")";
+            return normalizedType == "object" || normalizedType == "System.Object"
+                ? callExpr
+                : "(" + QualifyType(normalizedType) + ")" + callExpr;
+        }
+
+        if (normalizedType == "string" || normalizedType == "System.String" || normalizedType == "object" || normalizedType == "System.Object")
+        {
+            return valueExpression;
         }
 
         if (normalizedType == "Type" || normalizedType == "System.Type")

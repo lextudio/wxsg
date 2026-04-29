@@ -57,8 +57,17 @@ namespace SimpleSampleCrashRepro
                 throw new InvalidOperationException("Unable to resolve {x:Static Member=Fonts.SystemFontFamilies}.");
             }
 
+            var focusVisualSetter = negativeCheckbox.Style.Setters
+                .OfType<Setter>()
+                .FirstOrDefault(setter => setter.Property == FrameworkElement.FocusVisualStyleProperty);
+            if (focusVisualSetter?.Value is string)
+            {
+                throw new InvalidOperationException("Unable to resolve Setter.Value={StaticResource FocusVisual} for FocusVisualStyle.");
+            }
+
             Console.WriteLine("OK: SimpleSample-style classless designer resources loaded as BAML and merged into Application.Resources.");
             Console.WriteLine("OK: x:Static Member=Fonts.SystemFontFamilies resolved for toolbar-style binding.");
+            Console.WriteLine("OK: Setter.Value StaticResource resolved for FocusVisualStyle.");
         }
 
         private static void AssertBamlResource(string uriText)

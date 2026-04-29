@@ -513,6 +513,16 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "");
         sb.AppendLine(i + "    var __targetType = __property.PropertyType;");
+        sb.AppendLine(i + "    if (__text.StartsWith(\"{StaticResource \", global::System.StringComparison.Ordinal) && __text.EndsWith(\"}\", global::System.StringComparison.Ordinal))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __scope = __WXSG_CurrentRootResourceScope ?? global::System.Windows.Application.Current;");
+        sb.AppendLine(i + "        var __resource = __WXSG_ResolveStaticResource(__scope, __text);");
+        sb.AppendLine(i + "        if (__resource is not null)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return __resource;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
         sb.AppendLine(i + "    if (__targetType == typeof(string))");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        return __text;");
