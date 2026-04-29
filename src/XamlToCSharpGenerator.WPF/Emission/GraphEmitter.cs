@@ -13,6 +13,7 @@ internal sealed class GraphEmitter
 {
     private const string WpfFrameworkId = "WPF";
     private readonly Dictionary<string, string> _namedFieldTypes;
+    private readonly HashSet<string> _registeredNames = new(StringComparer.Ordinal);
     private readonly List<string> _deferredEventSubscriptions = new();
     private int _localCounter;
 
@@ -50,7 +51,6 @@ internal sealed class GraphEmitter
         if (string.Equals(nodeSimpleName, "Style", StringComparison.Ordinal) ||
             string.Equals(nodeTypeNoGlobal, "System.Windows.Style", StringComparison.Ordinal))
         {
-            try { System.Console.WriteLine("[WXSG] EmitNodeInitialization detected style: node.TypeName='" + node.TypeName + "' simple='" + nodeSimpleName + "' instanceVar='" + instanceVariable + "'"); } catch { }
             nextAmbientStyleTargetTypeExpression = instanceVariable + ".TargetType";
         }
 
@@ -71,14 +71,20 @@ internal sealed class GraphEmitter
     private void EmitNamedFieldAssignment(ResolvedObjectNode node, string instanceVariable, bool suppressNamedFieldRegistration)
     {
         if (suppressNamedFieldRegistration ||
-            string.IsNullOrWhiteSpace(node.Name) ||
-            !_namedFieldTypes.TryGetValue(node.Name, out var fieldType))
+            string.IsNullOrWhiteSpace(node.Name))
         {
             return;
         }
 
-        Builder.AppendLine(MemberIndent + "    this." + CodeGenUtilities.EscapeIdentifier(node.Name) + " = (" + CodeGenUtilities.QualifyType(fieldType) + ")" + instanceVariable + ";");
-        Builder.AppendLine(MemberIndent + "    this.RegisterName(" + CodeGenUtilities.EscapeStringLiteral(node.Name) + ", this." + CodeGenUtilities.EscapeIdentifier(node.Name) + ");");
+        if (_namedFieldTypes.TryGetValue(node.Name, out var fieldType))
+        {
+            Builder.AppendLine(MemberIndent + "    this." + CodeGenUtilities.EscapeIdentifier(node.Name) + " = (" + CodeGenUtilities.QualifyType(fieldType) + ")" + instanceVariable + ";");
+        }
+
+        if (_registeredNames.Add(node.Name))
+        {
+            Builder.AppendLine(MemberIndent + "    this.RegisterName(" + CodeGenUtilities.EscapeStringLiteral(node.Name) + ", " + instanceVariable + ");");
+        }
     }
 
     private void EmitPropertyAssignments(

@@ -57,6 +57,11 @@ namespace SimpleSampleCrashRepro
                 throw new InvalidOperationException("Unable to resolve {x:Static Member=Fonts.SystemFontFamilies}.");
             }
 
+            if (!string.Equals(rootNameBindingProbe.Text, Title, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Unable to resolve ElementName=root binding through the generated namescope.");
+            }
+
             var focusVisualSetter = negativeCheckbox.Style.Setters
                 .OfType<Setter>()
                 .FirstOrDefault(setter => setter.Property == FrameworkElement.FocusVisualStyleProperty);
@@ -68,6 +73,7 @@ namespace SimpleSampleCrashRepro
             Console.WriteLine("OK: SimpleSample-style classless designer resources loaded as BAML and merged into Application.Resources.");
             Console.WriteLine("OK: x:Static Member=Fonts.SystemFontFamilies resolved for toolbar-style binding.");
             Console.WriteLine("OK: Setter.Value StaticResource resolved for FocusVisualStyle.");
+            Console.WriteLine("OK: ElementName=root binding resolved through generated namescope.");
         }
 
         private static void AssertBamlResource(string uriText)
