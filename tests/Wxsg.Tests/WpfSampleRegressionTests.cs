@@ -138,6 +138,8 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         var generatedCode = artifact.ReadGeneratedCSharp();
 
         Assert.Contains("__root.Resources = __node0;", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("__node0Init?.BeginInit();", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("__node0Init?.EndInit();", generatedCode, StringComparison.Ordinal);
         Assert.Contains("__node0.Add(\"toolBoxItems\", __node1);", generatedCode, StringComparison.Ordinal);
         Assert.Contains(
             "Source = __WXSG_ResolveStaticResource(__node",

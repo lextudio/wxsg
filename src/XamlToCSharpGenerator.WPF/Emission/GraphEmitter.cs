@@ -949,12 +949,16 @@ internal sealed class GraphEmitter
             : "new " + CodeGenUtilities.QualifyType(child.TypeName) + "()";
 
         Builder.AppendLine(MemberIndent + "    var " + localVariable + " = " + creationExpression + ";");
+        var initVariable = localVariable + "Init";
+        Builder.AppendLine(MemberIndent + "    var " + initVariable + " = (object)" + localVariable + " as global::System.ComponentModel.ISupportInitialize;");
+        Builder.AppendLine(MemberIndent + "    " + initVariable + "?.BeginInit();");
         EmitNodeInitialization(
             child,
             localVariable,
             isRootNode: false,
             ambientStyleTargetTypeExpression,
             suppressNamedFieldRegistration);
+        Builder.AppendLine(MemberIndent + "    " + initVariable + "?.EndInit();");
         return localVariable;
     }
 
