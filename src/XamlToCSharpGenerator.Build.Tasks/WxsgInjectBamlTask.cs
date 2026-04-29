@@ -4,7 +4,7 @@ using System.IO;
 using System.Resources;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
-using Obfuscar.Metadata.Mutable;
+using LeXtudio.Metadata.Mutable;
 
 namespace XamlToCSharpGenerator.Build.Tasks
 {
