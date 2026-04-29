@@ -126,9 +126,9 @@ namespace XamlToCSharpGenerator.Build.Tasks
                     if (string.IsNullOrEmpty(resourceKey))
                     {
                         // Derive from the BAML file path relative to the project dir
-                        var rel = Path.GetRelativePath(projectDir, bamlPath)
-                                      .Replace('\\', '/')
-                                      .ToLowerInvariant();
+                        var rel = MakeRelativePath(projectDir, bamlPath)
+                            .Replace('\\', '/')
+                            .ToLowerInvariant();
                         // Remove leading "./" if present
                         if (rel.StartsWith("./", StringComparison.Ordinal))
                             rel = rel.Substring(2);
@@ -183,6 +183,32 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 Log.LogError("WxsgInjectBaml: failed: {0}", ex.ToString());
                 return false;
             }
+        }
+
+        private static string MakeRelativePath(string baseDirectory, string path)
+        {
+            var fullBaseDirectory = EnsureTrailingDirectorySeparator(Path.GetFullPath(baseDirectory));
+            var fullPath = Path.GetFullPath(path);
+
+            var baseUri = new Uri(fullBaseDirectory, UriKind.Absolute);
+            var pathUri = new Uri(fullPath, UriKind.Absolute);
+            if (baseUri.Scheme != pathUri.Scheme)
+                return fullPath;
+
+            var relativeUri = baseUri.MakeRelativeUri(pathUri);
+            return Uri.UnescapeDataString(relativeUri.ToString()).Replace('/', Path.DirectorySeparatorChar);
+        }
+
+        private static string EnsureTrailingDirectorySeparator(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return Path.DirectorySeparatorChar.ToString();
+
+            var last = path[path.Length - 1];
+            if (last == Path.DirectorySeparatorChar || last == Path.AltDirectorySeparatorChar)
+                return path;
+
+            return path + Path.DirectorySeparatorChar;
         }
     }
 }
