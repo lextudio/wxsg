@@ -273,7 +273,6 @@
         InputFiles="@(_WxsgDeferredClasslessPage)"
         OutputDirectory="$(IntermediateOutputPath)wxsg\raw-deferred"
         ProjectDirectory="$(MSBuildProjectDirectory)"
-        AssemblyName="$(AssemblyName)"
         Condition="'@(_WxsgDeferredClasslessPage)' != ''">
       <Output TaskParameter="StrippedFiles" ItemName="_WxsgEmbeddedDeferredClasslessPage" />
     </WxsgStripXSharedFromXaml>
@@ -328,7 +327,6 @@
       <InputFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
       <OutputDirectory ParameterType="System.String" Required="true" />
       <ProjectDirectory ParameterType="System.String" Required="true" />
-      <AssemblyName ParameterType="System.String" Required="false" />
       <StrippedFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
     </ParameterGroup>
     <Task>

@@ -396,8 +396,8 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                         // the deferred nodes end up with a foreign schema context that is
                         // incompatible with WPF's XamlObjectWriter at template-apply time,
                         // causing "Cannot create unknown type" for internal types like LinesRenderer.
-                        // The embedded raw XAML was preprocessed by WxsgStripXSharedFromXaml
-                        // (x:Shared stripped, assembly= added), so WPF's native loader can
+                // The embedded raw XAML was preprocessed by WxsgStripXSharedFromXaml
+                // (x:Shared stripped), so WPF's native loader can
                         // parse it directly without a custom XamlTypeMapper.
                         __wxsg_trace($"[loader] raw XAML detected → Source= native WPF load (deferred-template safe): {effectiveUri}");
                         return new global::System.Windows.ResourceDictionary { Source = effectiveUri };
