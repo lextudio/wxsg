@@ -931,9 +931,13 @@
          AssemblyFile="$(MSBuildThisFileDirectory)XamlToCSharpGenerator.Build.Tasks.dll"
          Condition="Exists('$(MSBuildThisFileDirectory)XamlToCSharpGenerator.Build.Tasks.dll')" />
 
-    <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
-         AssemblyFile="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll"
-         Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll')" />
+        <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
+          AssemblyFile="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll"
+          Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net8.0\XamlToCSharpGenerator.Build.Tasks.dll') and '$(TargetFramework)' != 'net48'" />
+
+            <UsingTask TaskName="XamlToCSharpGenerator.Build.Tasks.WxsgInjectBamlTask"
+              AssemblyFile="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net48\XamlToCSharpGenerator.Build.Tasks.dll"
+              Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\bin\$(Configuration)\net48\XamlToCSharpGenerator.Build.Tasks.dll') and '$(TargetFramework)' == 'net48'" />
 
   <!--
     Post-CoreCompile BAML bypass: generate BAML for classless pages that were removed from

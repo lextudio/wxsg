@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net8.0;net48</TargetFrameworks>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <RootNamespace>XamlToCSharpGenerator.Build.Tasks</RootNamespace>
     <AssemblyName>XamlToCSharpGenerator.Build.Tasks</AssemblyName>
     <!-- Task assemblies must not copy themselves to output since MSBuild loads them directly -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <UseNuGetPackage>false</UseNuGetPackage>
+    <UseNuGetPackages>true</UseNuGetPackages>
   </PropertyGroup>
 
   <ItemGroup>
