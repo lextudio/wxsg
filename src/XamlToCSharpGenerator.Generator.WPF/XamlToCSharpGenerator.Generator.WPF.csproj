@@ -99,12 +99,16 @@
   <Target Name="BuildXamlToCSharpGeneratorBuildTasks" BeforeTargets="Pack"
           Condition="Exists('..\\XamlToCSharpGenerator.Build.Tasks\\XamlToCSharpGenerator.Build.Tasks.csproj')">
     <MSBuild Projects="..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj"
-             Targets="Build"
-             Properties="Configuration=$(Configuration);TargetFramework=net8.0"
-             StopOnFirstFailure="true" />
+         Targets="Restore"
+         Properties="Configuration=$(Configuration)"
+         StopOnFirstFailure="true" />
     <MSBuild Projects="..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj"
-             Targets="Build"
-             Properties="Configuration=$(Configuration);TargetFramework=net48"
-             StopOnFirstFailure="true" />
+         Targets="Build"
+         Properties="Configuration=$(Configuration);TargetFramework=net8.0;NoBuild=false"
+         StopOnFirstFailure="true" />
+    <MSBuild Projects="..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj"
+         Targets="Build"
+         Properties="Configuration=$(Configuration);TargetFramework=net48;NoBuild=false"
+         StopOnFirstFailure="true" />
   </Target>
 </Project>
