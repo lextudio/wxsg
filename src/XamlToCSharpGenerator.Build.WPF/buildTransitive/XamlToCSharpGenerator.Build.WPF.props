@@ -27,4 +27,16 @@
 
   </PropertyGroup>
 
+  <!--
+    Source-tree development: ensure the local MSBuild task assembly is built
+    before targets try to load it from XamlToCSharpGenerator.Build.Tasks/bin.
+    In a NuGet package this relative project path does not exist, so package
+    consumers are unaffected.
+  -->
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj')">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\XamlToCSharpGenerator.Build.Tasks\XamlToCSharpGenerator.Build.Tasks.csproj"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
 </Project>
