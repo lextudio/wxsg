@@ -7,6 +7,7 @@
     <AssemblyName>XamlToCSharpGenerator.Build.Tasks</AssemblyName>
     <!-- Task assemblies must not copy themselves to output since MSBuild loads them directly -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <UseNuGetPackage>false</UseNuGetPackage>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,8 +15,12 @@
     <PackageReference Include="Microsoft.Build.Utilities.Core" Version="17.10.4" PrivateAssets="all" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.1" />
   </ItemGroup>
-  <ItemGroup>
+  <ItemGroup Condition="'$(UseNuGetPackage)' == 'true'">
     <!-- Prefer consuming the packed NuGet package instead of a local project ref -->
     <PackageReference Include="LeXtudio.Metadata.Mutable" Version="0.9.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(UseNuGetPackage)' != 'true'">
+    <!-- For local development, reference the project directly -->
+    <ProjectReference Include="..\..\external\metadata\src\LeXtudio.Metadata.Mutable\LeXtudio.Metadata.Mutable.csproj" />
   </ItemGroup>
 </Project>
