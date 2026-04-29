@@ -1,43 +1,33 @@
 using System;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Threading;
 
 namespace MainViewSample;
 
 public partial class App : Application
 {
-    public App()
+    protected override void OnStartup(StartupEventArgs e)
     {
-        this.DispatcherUnhandledException += App_DispatcherUnhandledException;
-        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
-        TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
-    }
-
-    private void App_DispatcherUnhandledException(object? sender, DispatcherUnhandledExceptionEventArgs e)
-    {
-        try
+        AppDomain.CurrentDomain.UnhandledException += (_, ev) =>
         {
-            // swallow for sample
-        }
-        catch { }
-    }
+            Console.Error.WriteLine(ev.ExceptionObject?.ToString());
+            Environment.Exit(1);
+        };
 
-    private void CurrentDomain_UnhandledException(object? sender, UnhandledExceptionEventArgs e)
-    {
-        try
+        this.DispatcherUnhandledException += (_, ev) =>
         {
-            // swallow for sample
-        }
-        catch { }
-    }
+            try { Console.Error.WriteLine(ev.Exception?.ToString()); } catch { }
+            ev.Handled = true;
+            Environment.Exit(1);
+        };
 
-    private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
-    {
-        try
+        TaskScheduler.UnobservedTaskException += (_, ev) =>
         {
-            e.SetObserved();
-        }
-        catch { }
+            try { Console.Error.WriteLine(ev.Exception?.ToString()); } catch { }
+            ev.SetObserved();
+            Environment.Exit(1);
+        };
+
+        base.OnStartup(e);
     }
 }

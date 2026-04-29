@@ -1,3 +1,5 @@
+using System;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace WpfTmpStubIssue.Scenario3_TypedField
@@ -14,7 +16,7 @@ namespace WpfTmpStubIssue.Scenario3_TypedField
             // After fix: field is 'internal ListView listView' → MouseDoubleClick is properly typed.
             listView.MouseDoubleClick += delegate
             {
-                MessageBox.Show("Double-clicked: " + listView.SelectedItem);
+                Console.WriteLine("Double-clicked: " + listView.SelectedItem);
             };
 
             // CS1977 (without Scenario 3 fix): cannot use a lambda expression as an
@@ -22,6 +24,21 @@ namespace WpfTmpStubIssue.Scenario3_TypedField
             listView.SelectionChanged += (sender, e) =>
             {
                 // handle selection change
+            };
+
+            this.ContentRendered += async (_, __) =>
+            {
+                try
+                {
+                    await Task.Yield();
+                    Console.WriteLine("WXSG-SAMPLE-OK");
+                    Environment.Exit(0);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + ex);
+                    Environment.Exit(1);
+                }
             };
         }
     }

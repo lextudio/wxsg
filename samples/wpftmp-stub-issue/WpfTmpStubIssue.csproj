@@ -4,7 +4,7 @@
           Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props')" />
 
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <OutputType>Exe</OutputType>
     <!--
       Regression test demonstrating the _wpftmp stub gap with WXSG.
 

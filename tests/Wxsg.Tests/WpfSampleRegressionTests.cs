@@ -21,18 +21,21 @@ public sealed class WxsgBuildFixture : IDisposable
             return;
 
         var repoRoot = GetWxsgRepositoryRoot();
-
-        var slnxPath = Path.Combine(repoRoot, "src", "wxsg.slnx");
+        var buildTasksProjectPath = Path.Combine(
+            repoRoot,
+            "src",
+            "XamlToCSharpGenerator.Build.Tasks",
+            "XamlToCSharpGenerator.Build.Tasks.csproj");
 
         var (restoreCode, restoreOutput) = RunProcess(
             repoRoot, "dotnet",
-            $"restore \"{slnxPath}\" --nologo -m:1");
+            $"restore \"{buildTasksProjectPath}\" --nologo -m:1 /nodeReuse:false --disable-build-servers");
         if (restoreCode != 0)
             throw new InvalidOperationException($"WXSG restore failed:\n{restoreOutput}");
 
         var (buildCode, buildOutput) = RunProcess(
             repoRoot, "dotnet",
-            $"build \"{slnxPath}\" --nologo -c Debug --no-restore -m:1 /nodeReuse:false --disable-build-servers");
+            $"build \"{buildTasksProjectPath}\" --nologo -c Debug --no-restore -m:1 /nodeReuse:false --disable-build-servers");
         if (buildCode != 0)
             throw new InvalidOperationException($"WXSG pre-build failed:\n{buildOutput}");
     }
@@ -65,6 +68,8 @@ public sealed class WxsgBuildFixture : IDisposable
 
 public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 {
+    private const string DefaultSampleFramework = "net10.0-windows";
+
     [Fact]
     public void MultiBinding_ItemsSource_Sample_Builds_And_Uses_DependencyProperty_Binding()
     {
@@ -186,6 +191,43 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 
         Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
         Assert.Contains("CollectionsToComposite", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThemeXStaticRepro_Sample_Builds_And_RawDeferredXaml_Rewritten()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/theme-xstatic-repro/ThemeXStaticRepro.csproj",
+            "wpf-sample-theme-xstatic-repro");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
+
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var rawDeferredXaml = Path.Combine(
+            repositoryRoot,
+            "samples",
+            "theme-xstatic-repro",
+            "obj",
+            "Debug",
+            "net10.0-windows",
+            "wxsg",
+            "raw-deferred",
+            "Themes",
+            "Theme.Dark.xaml");
+
+        Assert.True(File.Exists(rawDeferredXaml), $"Expected raw deferred XAML at '{rawDeferredXaml}'.");
+
+        var content = File.ReadAllText(rawDeferredXaml);
+        Assert.Contains("xmlns:wxsg_asm", content, StringComparison.Ordinal);
+        Assert.Contains("{x:Static wxsg_asm0:ResourceKeys.TextBackgroundBrush}", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("{x:Static clr-namespace:ThemeXStaticRepro.Themes;assembly=ThemeXStaticRepro:", content, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -446,12 +488,16 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
             content,
             StringComparison.Ordinal);
         Assert.Contains(
-            "{x:Static clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue:ResourceKeys.AccentBrush}",
+            "xmlns:wxsg_asm",
+            content,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "{x:Static wxsg_asm0:ResourceKeys.AccentBrush}",
             content,
             StringComparison.Ordinal);
         Assert.DoesNotContain(
-            "clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue",
-            content.Replace("{x:Static clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue:ResourceKeys.AccentBrush}", string.Empty, StringComparison.Ordinal),
+            "{x:Static clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue:",
+            content,
             StringComparison.Ordinal);
     }
 
@@ -591,6 +637,8 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
             .Append(projectPath)
             .Append("\" --no-restore -t:Rebuild --nologo -c Debug -m:1 /nodeReuse:false --disable-build-servers")
             .Append(" /p:BuildProjectReferences=false")
+            .Append(" -f ")
+            .Append(DefaultSampleFramework)
             .Append(BuildPropertyArguments(generatedDirectory))
             .ToString();
     }

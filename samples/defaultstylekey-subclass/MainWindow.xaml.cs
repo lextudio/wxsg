@@ -9,6 +9,45 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         Loaded += OnWindowLoaded;
+        this.ContentRendered += async (_, __) =>
+        {
+            try
+            {
+                // Programmatic self-check: create a dynamic SubTextBox, attach it,
+                // force template/layout application, and verify templates are present.
+                var sub = new SubTextBox();
+                dynamicHost.Content = sub;
+
+                // Try to apply template and update layout synchronously.
+                try { sub.ApplyTemplate(); } catch { }
+                try { dynamicHost.UpdateLayout(); } catch { }
+
+                // Give the dispatcher a turn to complete any remaining work.
+                await System.Threading.Tasks.Task.Yield();
+
+                bool staticHasTemplate = staticBox.Template != null;
+                bool dynamicHasTemplate = sub.Template != null;
+
+                SampleLog.Write($"[SelfCheck] staticBox.HasTemplate={staticHasTemplate} dynamicSub.HasTemplate={dynamicHasTemplate}");
+                try { statusText.Text = $"staticBox: {(staticHasTemplate ? "OK" : "MISSING")} | dynamic SubTextBox: {(dynamicHasTemplate ? "OK" : "MISSING")}"; } catch { }
+
+                if (staticHasTemplate && dynamicHasTemplate)
+                {
+                    Console.WriteLine("WXSG-SAMPLE-OK");
+                    Environment.Exit(0);
+                }
+                else
+                {
+                    Console.Error.WriteLine($"WXSG-SAMPLE-ERROR: staticHas={staticHasTemplate} dynamicHas={dynamicHasTemplate}");
+                    Environment.Exit(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + ex);
+                Environment.Exit(1);
+            }
+        };
     }
 
     private void OnWindowLoaded(object sender, RoutedEventArgs e)

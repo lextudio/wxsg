@@ -1,4 +1,6 @@
+using System;
 using System.Collections.ObjectModel;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace XStaticCustomNsSample
@@ -16,6 +18,21 @@ namespace XStaticCustomNsSample
             Items.Add(new Item { Name = "Gamma", IsActive = true });
 
             DataContext = this;
+
+            this.ContentRendered += async (_, __) =>
+            {
+                try
+                {
+                    await Task.Yield();
+                    Console.WriteLine("WXSG-SAMPLE-OK");
+                    Environment.Exit(0);
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + ex);
+                    Environment.Exit(1);
+                }
+            };
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace EventSetterLoadedSample
@@ -20,6 +21,13 @@ namespace EventSetterLoadedSample
             {
                 Console.Error.WriteLine("DispatcherUnhandledException: " + e.Exception.ToString());
                 e.Handled = true;
+                Environment.Exit(1);
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                Console.Error.WriteLine("UnobservedTaskException: " + e.Exception.ToString());
+                e.SetObserved();
                 Environment.Exit(1);
             };
 
