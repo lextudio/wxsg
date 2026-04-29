@@ -1,3 +1,6 @@
 [submodule "external/XamlToCSharpGenerator"]
 	path = external/XamlToCSharpGenerator
 	url = https://github.com/lextudio/XamlToCSharpGenerator.git
+[submodule "external/metadata"]
+	path = external/metadata
+	url = https://github.com/lextudio/AssemblyTools
