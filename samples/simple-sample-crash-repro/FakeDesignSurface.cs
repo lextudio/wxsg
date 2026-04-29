@@ -1,4 +1,5 @@
 using System;
+using System.Windows;
 using System.Windows.Controls;
 
 namespace SimpleSampleCrashRepro
@@ -11,6 +12,14 @@ namespace SimpleSampleCrashRepro
         {
             DesignPanel = new FakeDesignPanel();
         }
+    }
+
+    public sealed class FakePropertyGridView : Control
+    {
+    }
+
+    public sealed class VersionedAssemblyResourceDictionary : ResourceDictionary
+    {
     }
 
     public sealed class FakeDesignPanel

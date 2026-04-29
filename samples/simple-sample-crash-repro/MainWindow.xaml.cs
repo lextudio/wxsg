@@ -37,8 +37,46 @@ namespace SimpleSampleCrashRepro
 
         private void MainWindow_ContentRendered(object? sender, EventArgs e)
         {
+            ValidateDesignerResources();
+
             // Trigger the same handler path as clicking a toolbox item in SimpleSample.
             lstControls.SelectedIndex = 2;
+        }
+
+        private void ValidateDesignerResources()
+        {
+            AssertBamlResource("pack://application:,,,/SimpleSampleCrashRepro;component/Themes/Generic.xaml");
+            AssertBamlResource("pack://application:,,,/SimpleSampleCrashRepro;component/DesignSurface.xaml");
+            AssertBamlResource("pack://application:,,,/SimpleSampleCrashRepro;component/PropertyGrid/PropertyGridView.xaml");
+
+            AssertStyle(typeof(FakeDesignSurface), "designer surface");
+            AssertStyle(typeof(FakePropertyGridView), "property grid");
+            AssertStyle(typeof(ProbeControl), "theme generic probe control");
+
+            Console.WriteLine("OK: SimpleSample-style classless designer resources loaded as BAML and merged into Application.Resources.");
+        }
+
+        private static void AssertBamlResource(string uriText)
+        {
+            var info = Application.GetResourceStream(new Uri(uriText, UriKind.Absolute));
+            if (info?.Stream == null)
+            {
+                throw new InvalidOperationException("Missing pack resource: " + uriText);
+            }
+
+            if (!string.Equals(info.ContentType, "application/baml+xml", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"Expected BAML resource for {uriText}, but got '{info.ContentType}'.");
+            }
+        }
+
+        private static void AssertStyle(Type targetType, string description)
+        {
+            var style = Application.Current.TryFindResource(targetType);
+            if (style is not System.Windows.Style)
+            {
+                throw new InvalidOperationException($"Missing implicit style for {description} ({targetType.FullName}).");
+            }
         }
 
         private void lstControls_SelectionChanged(object sender, SelectionChangedEventArgs e)

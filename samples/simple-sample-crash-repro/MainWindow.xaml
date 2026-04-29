@@ -7,6 +7,7 @@
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="120" />
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="120" />
         </Grid.ColumnDefinitions>
 
         <ListBox x:Name="lstControls" Grid.Column="0" SelectionChanged="lstControls_SelectionChanged">
@@ -20,5 +21,8 @@
                                  Background="White"
                                  BorderBrush="Gray"
                                  BorderThickness="1" />
+
+        <local:FakePropertyGridView x:Name="propertyGrid"
+                                    Grid.Column="2" />
     </Grid>
 </Window>
