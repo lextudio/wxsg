@@ -384,15 +384,42 @@
                         }
                     }
 
-                    foreach (var mapping in localClrNamespacesByPrefix)
-                    {
-                        var pattern = @"\{x:Static\s+" + Regex.Escape(mapping.Key) + @":";
-                        var replacement = "{x:Static clr-namespace:" + mapping.Value + ";assembly=" + AssemblyName + ":";
-                        processed = Regex.Replace(
-                            processed,
-                            pattern,
-                            _ => replacement,
-                            RegexOptions.IgnoreCase);
+                    // For raw XAML parsing, we cannot inline a full "clr-namespace:...;assembly=...:Type.Member"
+                    // inside the markup extension value — the WPF XAML parser rejects that syntax.
+                    // Instead, add a new xmlns prefix that includes the assembly and rewrite
+                    // the {x:Static prefix:...} occurrences to use the new prefix. This preserves
+                    // the original xmlns declarations (which may be intentionally bare to allow
+                    // same-assembly internal types), and provides an assembly-qualified alias
+                    // only for the static member usages that need it.
+                    var prefixCounter = 0;
+                    // Find the start tag of the root element so we can inject new xmlns declarations.
+                    var rootMatch = Regex.Match(processed, @"<\s*(?<name>[A-Za-z_][\w\.\-]*)(?<attrs>[^>]*)>", RegexOptions.IgnoreCase);
+                    for (var mappingEnum = localClrNamespacesByPrefix.GetEnumerator(); mappingEnum.MoveNext();) {
+                      var mapping = mappingEnum.Current;
+                      var existingPrefix = mapping.Key;
+                      var clrNamespace = mapping.Value;
+
+                      // Generate a unique temporary prefix that is unlikely to collide with user prefixes.
+                      string newPrefix;
+                      do {
+                        newPrefix = "wxsg_asm" + prefixCounter++;
+                      } while (processed.IndexOf("xmlns:" + newPrefix + "=", StringComparison.OrdinalIgnoreCase) >= 0);
+
+                      // Inject the new xmlns declaration into the root start tag, if found.
+                      if (rootMatch.Success)
+                      {
+                        var xmlnsDecl = " xmlns:" + newPrefix + "=\"clr-namespace:" + clrNamespace + ";assembly=" + AssemblyName + "\"";
+                        var originalStart = rootMatch.Value;
+                        var injectedStart = "<" + rootMatch.Groups["name"].Value + rootMatch.Groups["attrs"].Value + xmlnsDecl + ">";
+                        processed = processed.Substring(0, rootMatch.Index) + injectedStart + processed.Substring(rootMatch.Index + originalStart.Length);
+                        // Update rootMatch so subsequent injections don't use stale indices.
+                        rootMatch = Regex.Match(processed, @"<\s*(?<name>[A-Za-z_][\w\.\-]*)(?<attrs>[^>]*)>", RegexOptions.IgnoreCase);
+                      }
+
+                      // Replace usages of the original prefix in x:Static markup extensions with the new prefix.
+                      var pattern = @"\{x:Static\s+" + Regex.Escape(existingPrefix) + @":";
+                      var replacement = "{x:Static " + newPrefix + ":";
+                      processed = Regex.Replace(processed, pattern, _ => replacement, RegexOptions.IgnoreCase);
                     }
                 }
 

@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:themes="clr-namespace:ThemeXStaticRepro.Themes">
+
+  <!-- Key uses x:Static with a local clr-namespace prefix; WXSG previously rewrote
+       such keys and produced malformed tokens in raw-deferred output. -->
+  <SolidColorBrush x:Key="{x:Static themes:ResourceKeys.TextBackgroundBrush}" Color="#FF333337" />
+
+</ResourceDictionary>

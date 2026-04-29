@@ -1,0 +1,9 @@
+<Window x:Class="ThemeXStaticRepro.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Theme Repro" Height="200" Width="400"
+        Background="{StaticResource TextBackgroundBrush}">
+  <Grid>
+    <TextBlock Text="Theme Repro" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+  </Grid>
+</Window>
