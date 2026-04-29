@@ -337,6 +337,11 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "    }");
         sb.AppendLine(i);
         sb.AppendLine(i + "    var __memberToken = __trimmed.Substring(__open.Length, __trimmed.Length - __open.Length - 1).Trim();");
+        sb.AppendLine(i + "    const string __memberPrefix = \"Member=\";");
+        sb.AppendLine(i + "    if (__memberToken.StartsWith(__memberPrefix, global::System.StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __memberToken = __memberToken.Substring(__memberPrefix.Length).Trim();");
+        sb.AppendLine(i + "    }");
         sb.AppendLine(i + "    // Handle fully-qualified format: \"clr-namespace:XStaticCustomNsSample;assembly=XStaticCustomNsSample:Converters.CollectionsToComposite\"");
         sb.AppendLine(i + "    var __clrNsIdx = __memberToken.IndexOf(\"clr-namespace:\", global::System.StringComparison.Ordinal);");
         sb.AppendLine(i + "    if (__clrNsIdx >= 0)");

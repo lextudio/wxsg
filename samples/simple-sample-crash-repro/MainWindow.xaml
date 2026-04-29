@@ -22,7 +22,10 @@
                                  BorderBrush="Gray"
                                  BorderThickness="1" />
 
-        <local:FakePropertyGridView x:Name="propertyGrid"
-                                    Grid.Column="2" />
+        <StackPanel Grid.Column="2">
+            <local:FakePropertyGridView x:Name="propertyGrid" />
+            <ComboBox x:Name="cmbFontFamily"
+                      ItemsSource="{Binding Source={x:Static Member=Fonts.SystemFontFamilies}}" />
+        </StackPanel>
     </Grid>
 </Window>

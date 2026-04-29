@@ -52,8 +52,13 @@ namespace SimpleSampleCrashRepro
             AssertStyle(typeof(FakeDesignSurface), "designer surface");
             AssertStyle(typeof(FakePropertyGridView), "property grid");
             AssertStyle(typeof(ProbeControl), "theme generic probe control");
+            if (cmbFontFamily.ItemsSource is null)
+            {
+                throw new InvalidOperationException("Unable to resolve {x:Static Member=Fonts.SystemFontFamilies}.");
+            }
 
             Console.WriteLine("OK: SimpleSample-style classless designer resources loaded as BAML and merged into Application.Resources.");
+            Console.WriteLine("OK: x:Static Member=Fonts.SystemFontFamilies resolved for toolbar-style binding.");
         }
 
         private static void AssertBamlResource(string uriText)
