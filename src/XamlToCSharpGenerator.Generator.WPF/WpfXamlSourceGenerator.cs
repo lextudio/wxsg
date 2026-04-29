@@ -253,12 +253,23 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public static class __WxsgThemeLoader");
         sb.AppendLine("    {");
+        sb.AppendLine("        private static bool __wxsg_debug => global::System.Environment.GetEnvironmentVariable(\"WXSG_DEBUG\") != null;");
+        sb.AppendLine("        private static readonly string __wxsg_log =");
+        sb.AppendLine("            global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), \"wxsg_theme_loader.log\");");
+        sb.AppendLine("        private static void __wxsg_trace(string msg)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (__wxsg_debug)");
+        sb.AppendLine("                try { global::System.IO.File.AppendAllText(__wxsg_log, msg + \"\\n\"); } catch { }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
         sb.AppendLine("        [global::System.Runtime.CompilerServices.ModuleInitializer]");
         sb.AppendLine("        internal static void Initialize()");
         sb.AppendLine("        {");
+        sb.AppendLine("            __wxsg_trace(\"[theme] ModuleInitializer fired\");");
         sb.AppendLine("            var app = global::System.Windows.Application.Current;");
         sb.AppendLine("            if (app is null)");
         sb.AppendLine("            {");
+        sb.AppendLine("                __wxsg_trace(\"[theme] app is null, deferring\");");
         sb.AppendLine("                // Assembly loaded before Application was created (e.g. during static init).");
         sb.AppendLine("                // Defer the merge to the UI thread message queue; Application will be set by then.");
         sb.AppendLine("                try");
@@ -267,10 +278,11 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("                        new global::System.Action(() =>");
         sb.AppendLine("                        {");
         sb.AppendLine("                            var deferredApp = global::System.Windows.Application.Current;");
+        sb.AppendLine("                            __wxsg_trace($\"[theme] deferred app={deferredApp}\");");
         sb.AppendLine("                            if (deferredApp is not null) MergeResources(deferredApp);");
         sb.AppendLine("                        }));");
         sb.AppendLine("                }");
-        sb.AppendLine("                catch { }");
+        sb.AppendLine("                catch (global::System.Exception ex) { __wxsg_trace($\"[theme] defer exception: {ex.Message}\"); }");
         sb.AppendLine("                return;");
         sb.AppendLine("            }");
         sb.AppendLine("            // Normal case: assembly loaded lazily during the app's lifetime (e.g. inside");
@@ -279,7 +291,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("            {");
         sb.AppendLine("                MergeResources(app);");
         sb.AppendLine("            }");
-        sb.AppendLine("            catch { }");
+        sb.AppendLine("            catch (global::System.Exception ex) { __wxsg_trace($\"[theme] Initialize exception: {ex.Message}\"); }");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        // Public helper to allow host applications to register/merge this assembly's\n");
@@ -288,7 +300,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         sb.AppendLine("            var app = global::System.Windows.Application.Current;");
         sb.AppendLine("            if (app is null) return;");
-        sb.AppendLine("            try { MergeResources(app); } catch { }");
+        sb.AppendLine("            try { MergeResources(app); } catch (global::System.Exception ex) { __wxsg_trace($\"[theme] Register exception: {ex.Message}\"); }");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        private static void MergeResources(global::System.Windows.Application app)");
@@ -316,8 +328,9 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("                    }");
         sb.AppendLine("                }");
         sb.AppendLine("                app.Resources.MergedDictionaries.Add(__wxsg_rd);");
+        sb.AppendLine("                __wxsg_trace($\"[theme] merged {uri}; count={app.Resources.MergedDictionaries.Count}\");");
         sb.AppendLine("            }");
-        sb.AppendLine("            catch { }");
+        sb.AppendLine("            catch (global::System.Exception ex) { __wxsg_trace($\"[theme] MergeDict failed {uri}: {ex.GetType().FullName}: {ex.Message}\"); }");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");
@@ -400,7 +413,22 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
                 // (x:Shared stripped), so WPF's native loader can
                         // parse it directly without a custom XamlTypeMapper.
                         __wxsg_trace($"[loader] raw XAML detected → Source= native WPF load (deferred-template safe): {effectiveUri}");
-                        return new global::System.Windows.ResourceDictionary { Source = effectiveUri };
+                        try
+                        {
+                            return new global::System.Windows.ResourceDictionary { Source = effectiveUri };
+                        }
+                        catch (global::System.Exception ex)
+                        {
+                            // Some deferred dictionaries contain same-assembly clr-namespace mappings
+                            // that WPF's Source= path cannot resolve from raw XAML. Fall back to the
+                            // parser-context path so those mappings behave like local BAML mappings.
+                            __wxsg_trace($"[loader] Source= failed ({ex.GetType().FullName}: {ex.Message}) → ParserContext fallback: {effectiveUri}");
+                            var parserContext = CreateParserContext(effectiveUri, xaml);
+                            var bytes = global::System.Text.Encoding.UTF8.GetBytes(xaml);
+                            using var fallbackStream = new global::System.IO.MemoryStream(bytes);
+                            return (global::System.Windows.ResourceDictionary)
+                                global::System.Windows.Markup.XamlReader.Load(fallbackStream, parserContext);
+                        }
                     }
 
                     private static string RemoveInvalidXmlChars(string s)

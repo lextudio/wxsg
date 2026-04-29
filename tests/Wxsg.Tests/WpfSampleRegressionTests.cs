@@ -26,6 +26,11 @@ public sealed class WxsgBuildFixture : IDisposable
             "src",
             "XamlToCSharpGenerator.Build.Tasks",
             "XamlToCSharpGenerator.Build.Tasks.csproj");
+        var generatorProjectPath = Path.Combine(
+            repoRoot,
+            "src",
+            "XamlToCSharpGenerator.Generator.WPF",
+            "XamlToCSharpGenerator.Generator.WPF.csproj");
 
         var (restoreCode, restoreOutput) = RunProcess(
             repoRoot, "dotnet",
@@ -33,11 +38,17 @@ public sealed class WxsgBuildFixture : IDisposable
         if (restoreCode != 0)
             throw new InvalidOperationException($"WXSG restore failed:\n{restoreOutput}");
 
-        var (buildCode, buildOutput) = RunProcess(
+        var (buildTasksCode, buildTasksOutput) = RunProcess(
             repoRoot, "dotnet",
             $"build \"{buildTasksProjectPath}\" --nologo -c Debug --no-restore -m:1 /nodeReuse:false --disable-build-servers");
-        if (buildCode != 0)
-            throw new InvalidOperationException($"WXSG pre-build failed:\n{buildOutput}");
+        if (buildTasksCode != 0)
+            throw new InvalidOperationException($"WXSG task pre-build failed:\n{buildTasksOutput}");
+
+        var (buildGeneratorCode, buildGeneratorOutput) = RunProcess(
+            repoRoot, "dotnet",
+            $"build \"{generatorProjectPath}\" --nologo -c Debug --no-restore -f netstandard2.0 -m:1 /nodeReuse:false --disable-build-servers");
+        if (buildGeneratorCode != 0)
+            throw new InvalidOperationException($"WXSG generator pre-build failed:\n{buildGeneratorOutput}");
     }
 
     public void Dispose() { }
@@ -60,7 +71,18 @@ public sealed class WxsgBuildFixture : IDisposable
         using var process = Process.Start(startInfo)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+        if (!process.WaitForExit((int)TimeSpan.FromMinutes(5).TotalMilliseconds))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit();
+            }
+            catch
+            {
+            }
+        }
+
         System.Threading.Tasks.Task.WaitAll(stdout, stderr);
         return (process.ExitCode, stdout.Result + stderr.Result);
     }
@@ -710,7 +732,18 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 
         var stdoutTask = process!.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+        if (!process.WaitForExit((int)TimeSpan.FromMinutes(5).TotalMilliseconds))
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+                process.WaitForExit();
+            }
+            catch
+            {
+            }
+        }
+
         System.Threading.Tasks.Task.WaitAll(stdoutTask, stderrTask);
 
         var outputBuilder = new StringBuilder();
