@@ -262,10 +262,10 @@
     </ItemGroup>
 
     <!--
-      Deferred classless pages must also be embedded as raw XAML Resource items so that
-      __WxsgThemeLoader can load them via pack URI at runtime (Application.GetResourceStream).
-      Without this, generic.xaml and similar theme files are in None only, their pack URIs
-      don't resolve, and controls lose their ControlTemplates/styles at runtime.
+      Generate normalized raw XAML copies for diagnostics and regression coverage.
+      Runtime loading should prefer the injected BAML entries from _WxsgBamlBypass;
+      embedding these raw copies under the same pack URI would shadow the BAML and
+      make WPF parse dictionaries that may contain internal same-assembly types.
       WxsgStripXSharedFromXaml strips x:Shared, a BAML-only attribute rejected by
       the raw XAML parser, and assembly-qualifies same-assembly x:Static member
       tokens without changing the xmlns values used for element/type creation.
@@ -278,10 +278,6 @@
         Condition="'@(_WxsgDeferredClasslessPage)' != ''">
       <Output TaskParameter="StrippedFiles" ItemName="_WxsgEmbeddedDeferredClasslessPage" />
     </WxsgStripXSharedFromXaml>
-
-    <ItemGroup>
-      <Resource Include="@(_WxsgEmbeddedDeferredClasslessPage)" KeepDuplicates="false" />
-    </ItemGroup>
 
     <Message Importance="Low"
              Text="WXSG: deferring classless page to post-CoreCompile BAML: %(_WxsgDeferredClasslessPage.Identity)" />
@@ -1057,7 +1053,7 @@
         AssemblyPath="$(_WxsgCompiledAssemblyPath)"
         BamlFiles="@(_WxsgGeneratedBaml)"
         AssemblyName="$(AssemblyName)"
-        ProjectDirectory="$(MSBuildProjectDirectory)"
+        ProjectDirectory="$(IntermediateOutputPath)"
         Condition="'@(_WxsgGeneratedBaml)' != '' and $([System.IO.File]::Exists('$(_WxsgCompiledAssemblyPath)'))" />
 
     <Message Importance="Normal"

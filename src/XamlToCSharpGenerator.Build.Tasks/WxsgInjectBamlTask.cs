@@ -136,7 +136,7 @@ namespace XamlToCSharpGenerator.Build.Tasks
                     }
 
                     var bamlBytes = File.ReadAllBytes(bamlPath);
-                    entries[resourceKey] = bamlBytes;
+                    entries[resourceKey] = CreateStreamResourceData(bamlBytes);
                     Log.LogMessage(MessageImportance.Normal,
                         "WxsgInjectBaml: adding BAML key '{0}' ({1} bytes)", resourceKey, bamlBytes.Length);
                 }
@@ -183,6 +183,18 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 Log.LogError("WxsgInjectBaml: failed: {0}", ex.ToString());
                 return false;
             }
+        }
+
+        private static byte[] CreateStreamResourceData(byte[] bytes)
+        {
+            using var ms = new MemoryStream();
+            using (var writer = new BinaryWriter(ms))
+            {
+                writer.Write(bytes.Length);
+                writer.Write(bytes);
+            }
+
+            return ms.ToArray();
         }
 
         private static string MakeRelativePath(string baseDirectory, string path)
