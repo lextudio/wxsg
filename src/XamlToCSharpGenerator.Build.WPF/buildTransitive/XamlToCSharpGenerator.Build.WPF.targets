@@ -267,12 +267,14 @@
       Without this, generic.xaml and similar theme files are in None only, their pack URIs
       don't resolve, and controls lose their ControlTemplates/styles at runtime.
       WxsgStripXSharedFromXaml strips x:Shared, a BAML-only attribute rejected by
-      the raw XAML parser.
+      the raw XAML parser, and assembly-qualifies same-assembly x:Static member
+      tokens without changing the xmlns values used for element/type creation.
     -->
     <WxsgStripXSharedFromXaml
         InputFiles="@(_WxsgDeferredClasslessPage)"
         OutputDirectory="$(IntermediateOutputPath)wxsg\raw-deferred"
         ProjectDirectory="$(MSBuildProjectDirectory)"
+        AssemblyName="$(AssemblyName)"
         Condition="'@(_WxsgDeferredClasslessPage)' != ''">
       <Output TaskParameter="StrippedFiles" ItemName="_WxsgEmbeddedDeferredClasslessPage" />
     </WxsgStripXSharedFromXaml>
@@ -317,6 +319,11 @@
     namespace remains local; forcing an explicit assembly makes those types look
     external and can fail with "Cannot create unknown type".
 
+    Same-assembly x:Static member tokens are different: WPF's raw StaticExtension
+    does not infer the current assembly from a bare clr-namespace prefix, so rewrite
+    only those tokens to a clr-namespace:...;assembly=... member reference while
+    leaving the xmlns declaration itself unchanged.
+
     The Link metadata is set so MSBuild embeds the processed copy under the same
     pack URI path as the original.
   -->
@@ -327,6 +334,7 @@
       <InputFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
       <OutputDirectory ParameterType="System.String" Required="true" />
       <ProjectDirectory ParameterType="System.String" Required="true" />
+      <AssemblyName ParameterType="System.String" Required="false" />
       <StrippedFiles ParameterType="Microsoft.Build.Framework.ITaskItem[]" Output="true" />
     </ParameterGroup>
     <Task>
@@ -354,6 +362,39 @@
                     @"[ \t]*x:Shared\s*=\s*""[^""]*""",
                     string.Empty,
                     RegexOptions.IgnoreCase);
+
+                // 2. For bare same-assembly xmlns declarations, qualify only x:Static
+                //    member tokens. Leave xmlns values bare so internal same-assembly
+                //    elements can still be created by WPF's raw XAML loader.
+                if (!string.IsNullOrEmpty(AssemblyName))
+                {
+                    var localClrNamespacesByPrefix = new Dictionary<string, string>(StringComparer.Ordinal);
+                    foreach (Match match in Regex.Matches(
+                        processed,
+                        @"xmlns:(?<prefix>[A-Za-z_][\w.-]*)\s*=\s*[""']clr-namespace:(?<namespace>[^;""']+)[""']",
+                        RegexOptions.IgnoreCase))
+                    {
+                        var prefix = match.Groups["prefix"].Value;
+                        var clrNamespace = match.Groups["namespace"].Value;
+                        if (!string.IsNullOrWhiteSpace(prefix) &&
+                            !string.IsNullOrWhiteSpace(clrNamespace) &&
+                            !localClrNamespacesByPrefix.ContainsKey(prefix))
+                        {
+                            localClrNamespacesByPrefix.Add(prefix, clrNamespace);
+                        }
+                    }
+
+                    foreach (var mapping in localClrNamespacesByPrefix)
+                    {
+                        var pattern = @"\{x:Static\s+" + Regex.Escape(mapping.Key) + @":";
+                        var replacement = "{x:Static clr-namespace:" + mapping.Value + ";assembly=" + AssemblyName + ":";
+                        processed = Regex.Replace(
+                            processed,
+                            pattern,
+                            _ => replacement,
+                            RegexOptions.IgnoreCase);
+                    }
+                }
 
                 // Determine the link path (relative to project dir) so the embedded
                 // resource gets the same name as the original file.

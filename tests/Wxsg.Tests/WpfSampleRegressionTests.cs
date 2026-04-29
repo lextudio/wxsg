@@ -445,9 +445,13 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
             "xmlns:local=\"clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase\"",
             content,
             StringComparison.Ordinal);
+        Assert.Contains(
+            "{x:Static clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue:ResourceKeys.AccentBrush}",
+            content,
+            StringComparison.Ordinal);
         Assert.DoesNotContain(
             "clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue",
-            content,
+            content.Replace("{x:Static clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue:ResourceKeys.AccentBrush}", string.Empty, StringComparison.Ordinal),
             StringComparison.Ordinal);
     }
 

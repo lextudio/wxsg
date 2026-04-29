@@ -24,6 +24,8 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase">
+    <SolidColorBrush x:Key="{x:Static local:ResourceKeys.AccentBrush}" Color="CornflowerBlue" />
+
     <Style TargetType="{x:Type local:MyControl}">
         <Setter Property="Background" Value="White" />
     </Style>
