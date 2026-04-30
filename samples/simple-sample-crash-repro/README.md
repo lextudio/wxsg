@@ -12,6 +12,7 @@ This sample reproduces the toolbox-selection shape from WpfDesigner SimpleSample
 - The sample verifies those dictionaries resolve as `application/baml+xml` pack resources and that their implicit styles are merged into `Application.Resources`, matching the SimpleSample designer pane/property grid failure.
 - The sample includes a toolbar-style binding with `{x:Static Member=Fonts.SystemFontFamilies}`, matching the RichTextBoxToolbar crash path.
 - The sample includes a TimeSpanEditor-style `FocusVisualStyle` setter with `Value="{StaticResource FocusVisual}"`, matching the style-sealing crash path.
+- The sample includes a XamlDesigner-style AvalonDock `LayoutAnchorable` outline pane hosting a WXSG-generated `FakeOutline.xaml` user control. The outer pane binds `Root="{Binding CurrentDocument.OutlineRoot}"`; the inner tree binds `Root="{Binding Root, ElementName=root}"`; the inner tree uses a `DefaultStyleKey` template from `OutlineView/OutlineView.xaml` merged through `Themes/Generic.xaml`; then the sample restores a serialized AvalonDock layout by `ContentId`.
 - On success the window closes, prints `OK:` status lines, and the process exits with code 0.
 
 Run locally with `dotnet run --project samples/simple-sample-crash-repro`.

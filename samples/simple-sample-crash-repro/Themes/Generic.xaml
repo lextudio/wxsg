@@ -3,6 +3,7 @@
                     xmlns:local="clr-namespace:SimpleSampleCrashRepro">
     <ResourceDictionary.MergedDictionaries>
         <local:VersionedAssemblyResourceDictionary Source="/SimpleSampleCrashRepro;component/DesignSurface.xaml" />
+        <local:VersionedAssemblyResourceDictionary Source="/SimpleSampleCrashRepro;component/OutlineView/OutlineView.xaml" />
         <local:VersionedAssemblyResourceDictionary Source="/SimpleSampleCrashRepro;component/PropertyGrid/PropertyGridView.xaml" />
     </ResourceDictionary.MergedDictionaries>
 

@@ -300,6 +300,8 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         Assert.Contains("OK: x:Static Member=Fonts.SystemFontFamilies resolved for toolbar-style binding.", runOutput.Output, StringComparison.Ordinal);
         Assert.Contains("OK: Setter.Value StaticResource resolved for FocusVisualStyle.", runOutput.Output, StringComparison.Ordinal);
         Assert.Contains("OK: ElementName=root binding resolved through generated namescope.", runOutput.Output, StringComparison.Ordinal);
+        Assert.Contains("OK: XamlDesigner-style AvalonDock outline pane resolved CurrentDocument.OutlineRoot.", runOutput.Output, StringComparison.Ordinal);
+        Assert.Contains("OK: XamlDesigner-style outline tree theme template resolved.", runOutput.Output, StringComparison.Ordinal);
         Assert.Contains("OK: SimpleSample-style designer load and toolbox selection completed without crashing.", runOutput.Output, StringComparison.Ordinal);
         Assert.DoesNotContain("CustomAttributeFormatException", runOutput.Output, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NullReferenceException", runOutput.Output, StringComparison.OrdinalIgnoreCase);

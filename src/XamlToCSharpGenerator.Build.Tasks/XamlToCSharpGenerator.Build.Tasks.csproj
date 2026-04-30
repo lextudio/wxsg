@@ -7,7 +7,7 @@
     <AssemblyName>XamlToCSharpGenerator.Build.Tasks</AssemblyName>
     <!-- Task assemblies must not copy themselves to output since MSBuild loads them directly -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
-    <UseNuGetPackage>true</UseNuGetPackage>
+    <UseNuGetPackage>false</UseNuGetPackage>
   </PropertyGroup>
 
   <ItemGroup>

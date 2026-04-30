@@ -2,8 +2,9 @@
         x:Name="root"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avalondock="https://github.com/Dirkster99/AvalonDock"
         xmlns:local="clr-namespace:SimpleSampleCrashRepro"
-        Title="SimpleSampleCrashRepro" Height="200" Width="400">
+        Title="SimpleSampleCrashRepro" Height="280" Width="520">
     <Window.Resources>
         <Style x:Key="FocusVisual">
             <Setter Property="Control.Template">
@@ -26,25 +27,30 @@
     </Window.Resources>
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="110" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="120" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="120" />
         </Grid.ColumnDefinitions>
 
-        <ListBox x:Name="lstControls" Grid.Column="0" SelectionChanged="lstControls_SelectionChanged">
+        <ListBox x:Name="lstControls" Grid.RowSpan="2" Grid.Column="0" SelectionChanged="lstControls_SelectionChanged">
             <ListBoxItem>Button</ListBoxItem>
             <ListBoxItem>TextBlock</ListBoxItem>
             <ListBoxItem>TextBox</ListBoxItem>
         </ListBox>
 
         <local:FakeDesignSurface x:Name="designSurface"
+                                 Grid.Row="0"
                                  Grid.Column="1"
                                  Background="White"
                                  BorderBrush="Gray"
                                  BorderThickness="1" />
 
-        <StackPanel Grid.Column="2">
+        <StackPanel Grid.Row="0" Grid.Column="2">
             <TextBlock x:Name="rootNameBindingProbe"
                        Text="{Binding Title, ElementName=root}"
                        Visibility="Collapsed" />
@@ -54,5 +60,24 @@
             <ComboBox x:Name="cmbFontFamily"
                       ItemsSource="{Binding Source={x:Static Member=Fonts.SystemFontFamilies}}" />
         </StackPanel>
+
+        <avalondock:DockingManager x:Name="outlineDock"
+                                   Grid.Row="1"
+                                   Grid.Column="1"
+                                   Grid.ColumnSpan="2"
+                                   AllowMixedOrientation="True">
+            <avalondock:LayoutRoot>
+                <avalondock:LayoutPanel Orientation="Horizontal">
+                    <avalondock:LayoutAnchorablePaneGroup DockWidth="280" Orientation="Vertical">
+                        <avalondock:LayoutAnchorablePane DockHeight="3*">
+                            <avalondock:LayoutAnchorable Title="Outline" ContentId="Outline">
+                                <local:FakeOutline x:Name="avalonOutline"
+                                                   Root="{Binding CurrentDocument.OutlineRoot}" />
+                            </avalondock:LayoutAnchorable>
+                        </avalondock:LayoutAnchorablePane>
+                    </avalondock:LayoutAnchorablePaneGroup>
+                </avalondock:LayoutPanel>
+            </avalondock:LayoutRoot>
+        </avalondock:DockingManager>
     </Grid>
 </Window>
