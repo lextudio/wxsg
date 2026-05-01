@@ -316,8 +316,24 @@ internal static class MarkupExtensionResolver
         foreach (var arg in markupInfo.PositionalArguments)
         {
             sb.Append('\x1f');
-            sb.Append("p:");
-            sb.Append(arg);
+            // Try to resolve the arg as a XAML type token (e.g. "controls:MainMenu").
+            // If resolved, encode it with "t:" so the runtime helper can pass a Type
+            // to the markup extension constructor instead of a raw string.
+            var trimmedArg = XamlQuotedValueSemantics.TrimAndUnquote(arg).Trim();
+            var resolvedArgType = TypeResolver.ResolveTypeToken(trimmedArg, context);
+            if (resolvedArgType is not null)
+            {
+                var fqn = resolvedArgType.ToDisplayString(
+                    Microsoft.CodeAnalysis.SymbolDisplayFormat.FullyQualifiedFormat)
+                    .Replace("global::", string.Empty);
+                sb.Append("t:");
+                sb.Append(fqn);
+            }
+            else
+            {
+                sb.Append("p:");
+                sb.Append(arg);
+            }
         }
 
         foreach (var kvp in markupInfo.NamedArguments)

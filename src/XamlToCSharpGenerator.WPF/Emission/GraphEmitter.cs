@@ -325,13 +325,6 @@ internal sealed class GraphEmitter
                 var umeIdx = _localCounter++;
                 var umeValVar = "__meVal_" + umeIdx.ToString(CultureInfo.InvariantCulture);
                 var umeBindVar = "__meBinding_" + umeIdx.ToString(CultureInfo.InvariantCulture);
-                var umeCall =
-                    "__WXSG_EvaluateUnknownMarkupExtension(" +
-                    CodeGenUtilities.EscapeStringLiteral(ume.NsUri) + ", " +
-                    CodeGenUtilities.EscapeStringLiteral(ume.LocalName) + ", " +
-                    CodeGenUtilities.BuildStringArrayExpression(ume.PositionalArgs) + ", " +
-                    CodeGenUtilities.BuildStringArrayExpression(ume.NamedArgKeys) + ", " +
-                    CodeGenUtilities.BuildStringArrayExpression(ume.NamedArgValues) + ")";
                 var umeTargetType = string.IsNullOrWhiteSpace(assignment.ClrPropertyTypeName)
                     ? "object"
                     : assignment.ClrPropertyTypeName;
@@ -339,6 +332,15 @@ internal sealed class GraphEmitter
                 var umePropNameEscaped = assignment.PropertyName
                     .Replace("\\", "\\\\")
                     .Replace("\"", "\\\"");
+                var umeCall =
+                    "__WXSG_EvaluateUnknownMarkupExtension(" +
+                    CodeGenUtilities.EscapeStringLiteral(ume.NsUri) + ", " +
+                    CodeGenUtilities.EscapeStringLiteral(ume.LocalName) + ", " +
+                    CodeGenUtilities.BuildStringArrayExpression(ume.PositionalArgs) + ", " +
+                    CodeGenUtilities.BuildStringArrayExpression(ume.NamedArgKeys) + ", " +
+                    CodeGenUtilities.BuildStringArrayExpression(ume.NamedArgValues) + ", " +
+                    instanceVariable + ", " +
+                    "\"" + umePropNameEscaped + "\""  + ")";
 
                 Builder.AppendLine(MemberIndent + "    {");
                 Builder.AppendLine(MemberIndent + "        var " + umeValVar + " = " + umeCall + ";");

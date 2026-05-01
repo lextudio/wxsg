@@ -142,6 +142,12 @@ internal static class CodeGenUtilities
             {
                 positionalArgs.Add(field.Substring(2));
             }
+            else if (field.StartsWith("t:", StringComparison.Ordinal))
+            {
+                // Type-referenced positional arg: keep the "t:" prefix so the runtime
+                // helper can resolve it to a System.Type instead of passing as string.
+                positionalArgs.Add(field);
+            }
             else if (field.StartsWith("n:", StringComparison.Ordinal))
             {
                 var eqIdx = field.IndexOf('=', 2);
@@ -269,6 +275,62 @@ internal static class CodeGenUtilities
             return normalizedType == "object" || normalizedType == "System.Object"
                 ? callExpr
                 : "(" + QualifyType(normalizedType) + ")" + callExpr;
+        }
+
+        if ((normalizedType == "RelativeSource" || normalizedType == "System.Windows.Data.RelativeSource") &&
+            MarkupParser.TryParseMarkupExtension(literalValue, out var relativeSourceInfo) &&
+            XamlMarkupExtensionNameSemantics.Classify(relativeSourceInfo.Name) == XamlMarkupExtensionKind.RelativeSource)
+        {
+            string? modeToken = null;
+            if (relativeSourceInfo.NamedArguments.TryGetValue("Mode", out var namedMode) ||
+                relativeSourceInfo.NamedArguments.TryGetValue("RelativeSourceMode", out namedMode))
+            {
+                modeToken = XamlQuotedValueSemantics.TrimAndUnquote(namedMode).Trim();
+            }
+            else if (relativeSourceInfo.PositionalArguments.Length > 0)
+            {
+                modeToken = XamlQuotedValueSemantics.TrimAndUnquote(relativeSourceInfo.PositionalArguments[0]).Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(modeToken))
+            {
+                var qualifiedMode = "global::System.Windows.Data.RelativeSourceMode." + modeToken;
+
+                if (string.Equals(modeToken, "FindAncestor", StringComparison.OrdinalIgnoreCase))
+                {
+                    var ancestorTypeToken = string.Empty;
+                    if (relativeSourceInfo.NamedArguments.TryGetValue("AncestorType", out var ancestorTypeRaw))
+                    {
+                        ancestorTypeToken = XamlQuotedValueSemantics.TrimAndUnquote(ancestorTypeRaw).Trim();
+                    }
+
+                    var ancestorLevelLiteral = "1";
+                    if (relativeSourceInfo.NamedArguments.TryGetValue("AncestorLevel", out var ancestorLevelRaw))
+                    {
+                        var parsedLevel = XamlQuotedValueSemantics.TrimAndUnquote(ancestorLevelRaw).Trim();
+                        if (int.TryParse(parsedLevel, NumberStyles.Integer, CultureInfo.InvariantCulture, out var levelValue) && levelValue > 0)
+                        {
+                            ancestorLevelLiteral = levelValue.ToString(CultureInfo.InvariantCulture);
+                        }
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(ancestorTypeToken))
+                    {
+                        var resolvedAncestorType = ResolveRuntimeType(
+                            ancestorTypeToken.Contains(':')
+                                ? ancestorTypeToken.Substring(ancestorTypeToken.IndexOf(':') + 1)
+                                : ancestorTypeToken);
+                        var ancestorTypeExpr = resolvedAncestorType is not null
+                            ? "typeof(" + QualifyType(resolvedAncestorType.FullName) + ")"
+                            : "__WXSG_ResolveTypeToken(" + EscapeStringLiteral(ancestorTypeToken) + ")";
+
+                        return "new global::System.Windows.Data.RelativeSource(" +
+                               qualifiedMode + ", " + ancestorTypeExpr + ", " + ancestorLevelLiteral + ")";
+                    }
+                }
+
+                return "new global::System.Windows.Data.RelativeSource(" + qualifiedMode + ")";
+            }
         }
 
         if (normalizedType == "string" || normalizedType == "System.String" || normalizedType == "object" || normalizedType == "System.Object")
