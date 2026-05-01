@@ -15,6 +15,7 @@ internal static class RuntimeHelpersEmitter
         EmitSetterValueHelper(emitter);
         EmitUnknownMarkupExtensionHelper(emitter);
         EmitTrySetBindingHelper(emitter);
+        EmitElementReferenceResolverHelper(emitter);
         EmitWpfCommandResolver(emitter, docClassFullName);
     }
 
@@ -1089,6 +1090,42 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "        }");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "}");
+    }
+
+    private static void EmitElementReferenceResolverHelper(GraphEmitter emitter)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        sb.AppendLine();
+        sb.AppendLine(i + "private static object __WXSG_ResolveElementReference(object __scope, string __token, global::System.Type __targetType)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (string.IsNullOrWhiteSpace(__token))");
+        sb.AppendLine(i + "        return null;");
+        sb.AppendLine(i + "    var __name = __token.Trim();");
+        sb.AppendLine(i + "    object __candidate = null;");
+        sb.AppendLine(i + "    if (__scope is global::System.Windows.FrameworkElement __fe)");
+        sb.AppendLine(i + "        __candidate = __fe.FindName(__name);");
+        sb.AppendLine(i + "    else if (__scope is global::System.Windows.FrameworkContentElement __fce)");
+        sb.AppendLine(i + "        __candidate = __fce.FindName(__name);");
+        sb.AppendLine(i + "    if (__candidate is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __mainWindow = global::System.Windows.Application.Current?.MainWindow;");
+        sb.AppendLine(i + "        if (__mainWindow is not null)");
+        sb.AppendLine(i + "            __candidate = __mainWindow.FindName(__name);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    if (__candidate is not null && __targetType.IsInstanceOfType(__candidate))");
+        sb.AppendLine(i + "        return __candidate;");
+        sb.AppendLine(i + "    try");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __converter = global::System.ComponentModel.TypeDescriptor.GetConverter(__targetType);");
+        sb.AppendLine(i + "        if (__converter is not null && __converter.CanConvertFrom(typeof(string)))");
+        sb.AppendLine(i + "            return __converter.ConvertFromInvariantString(__token);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    catch { }");
+        sb.AppendLine(i + "    return null;");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
     }
 
     private static void EmitWpfCommandResolver(GraphEmitter emitter, string? docClassFullName)

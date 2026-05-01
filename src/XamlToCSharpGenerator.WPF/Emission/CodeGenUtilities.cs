@@ -352,6 +352,18 @@ internal static class CodeGenUtilities
             return "__WXSG_ResolveTypeToken(" + valueExpression + ")";
         }
 
+        var runtimeType = ResolveRuntimeType(normalizedType);
+        if (runtimeType is not null &&
+            typeof(System.Windows.DependencyObject).IsAssignableFrom(runtimeType) &&
+            !string.IsNullOrWhiteSpace(scopeExpression) &&
+            literalValue.Length > 0 &&
+            literalValue.IndexOfAny(new[] { '{', '}', '.', '/', '\\', ':', ',', ' ' }) < 0)
+        {
+            var qualifiedTypeName = QualifyType(normalizedType);
+            return "(" + qualifiedTypeName + ")__WXSG_ResolveElementReference(" +
+                   scopeExpression + ", " + valueExpression + ", typeof(" + qualifiedTypeName + "))";
+        }
+
         if (normalizedType == "bool" || normalizedType == "System.Boolean")
         {
             return bool.TryParse(literalValue, out var boolValue)
