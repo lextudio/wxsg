@@ -107,6 +107,204 @@ internal static class CodeGenUtilities
         return true;
     }
 
+    internal static bool TryBuildXStaticDirectMemberAccessExpression(string xStaticToken, out string expression)
+    {
+        expression = string.Empty;
+
+        if (!MarkupParser.TryParseMarkupExtension(xStaticToken, out var markupInfo) ||
+            XamlMarkupExtensionNameSemantics.Classify(markupInfo.Name) != XamlMarkupExtensionKind.Static)
+        {
+            return false;
+        }
+
+        string? memberToken = null;
+        if (markupInfo.NamedArguments.TryGetValue("Member", out var namedMember) ||
+            markupInfo.NamedArguments.TryGetValue("MemberName", out namedMember))
+        {
+            memberToken = namedMember;
+        }
+        else if (markupInfo.PositionalArguments.Length > 0)
+        {
+            memberToken = markupInfo.PositionalArguments[0];
+        }
+
+        if (string.IsNullOrWhiteSpace(memberToken))
+        {
+            return false;
+        }
+
+        memberToken = XamlQuotedValueSemantics.TrimAndUnquote(memberToken).Trim();
+        if (!TrySplitQualifiedXStaticMemberToken(memberToken, out var clrNamespace, out var typeName, out var memberName))
+        {
+            return false;
+        }
+
+        if (!TryBuildQualifiedTypeReference(clrNamespace, typeName, out var qualifiedTypeName) ||
+            !TryEscapeSimpleIdentifier(memberName, out var escapedMemberName))
+        {
+            return false;
+        }
+
+        expression = qualifiedTypeName + "." + escapedMemberName;
+        return true;
+    }
+
+    private static bool TrySplitQualifiedXStaticMemberToken(
+        string memberToken,
+        out string clrNamespace,
+        out string typeName,
+        out string memberName)
+    {
+        clrNamespace = string.Empty;
+        typeName = string.Empty;
+        memberName = string.Empty;
+
+        const string clrNamespacePrefix = "clr-namespace:";
+        if (!memberToken.StartsWith(clrNamespacePrefix, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var payload = memberToken.Substring(clrNamespacePrefix.Length).Trim();
+        var memberSeparator = payload.LastIndexOf(':');
+        if (memberSeparator <= 0 || memberSeparator >= payload.Length - 1)
+        {
+            return false;
+        }
+
+        var namespaceSegment = payload.Substring(0, memberSeparator).Trim();
+        if (namespaceSegment.StartsWith("xmlns:", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var assemblySeparator = namespaceSegment.IndexOf(";assembly=", StringComparison.Ordinal);
+        if (assemblySeparator >= 0)
+        {
+            // Assembly-qualified tokens often come from XML namespace mappings that
+            // resolve via XmlnsDefinitionAttribute and can map to a different CLR
+            // namespace than the literal token suggests. Keep runtime resolution for
+            // these to avoid emitting invalid direct references.
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(namespaceSegment))
+        {
+            return false;
+        }
+
+        var typeAndMember = payload.Substring(memberSeparator + 1).Trim();
+        var typeMemberSeparator = typeAndMember.LastIndexOf('.');
+        if (typeMemberSeparator <= 0 || typeMemberSeparator >= typeAndMember.Length - 1)
+        {
+            return false;
+        }
+
+        var rawTypeName = typeAndMember.Substring(0, typeMemberSeparator).Trim();
+        var rawMemberName = typeAndMember.Substring(typeMemberSeparator + 1).Trim();
+        if (string.IsNullOrWhiteSpace(rawTypeName) || string.IsNullOrWhiteSpace(rawMemberName))
+        {
+            return false;
+        }
+
+        // Keep runtime resolver behavior for short owner type names because XML
+        // namespace mappings can fan out to multiple CLR namespaces and runtime
+        // logic probes child namespaces by short type name.
+        if (rawTypeName.IndexOf('.') < 0)
+        {
+            return false;
+        }
+
+        clrNamespace = namespaceSegment;
+        typeName = rawTypeName.Replace('+', '.');
+        memberName = rawMemberName;
+        return true;
+    }
+
+    private static bool TryBuildQualifiedTypeReference(string clrNamespace, string typeName, out string qualifiedTypeName)
+    {
+        qualifiedTypeName = string.Empty;
+
+        if (!TryEscapeIdentifierPath(clrNamespace, out var escapedNamespace) ||
+            !TryEscapeIdentifierPath(typeName, out var escapedTypeName))
+        {
+            return false;
+        }
+
+        qualifiedTypeName = "global::" + escapedNamespace + "." + escapedTypeName;
+        return true;
+    }
+
+    private static bool TryEscapeIdentifierPath(string path, out string escapedPath)
+    {
+        escapedPath = string.Empty;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        var segments = path.Split(new[] { '.' }, StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+        {
+            return false;
+        }
+
+        var escapedSegments = new string[segments.Length];
+        for (var i = 0; i < segments.Length; i++)
+        {
+            if (!TryEscapeSimpleIdentifier(segments[i], out escapedSegments[i]))
+            {
+                return false;
+            }
+        }
+
+        escapedPath = string.Join(".", escapedSegments);
+        return true;
+    }
+
+    private static bool TryEscapeSimpleIdentifier(string identifier, out string escapedIdentifier)
+    {
+        escapedIdentifier = string.Empty;
+        if (string.IsNullOrWhiteSpace(identifier))
+        {
+            return false;
+        }
+
+        var trimmed = identifier.Trim();
+        if (!IsValidCSharpIdentifier(trimmed))
+        {
+            return false;
+        }
+
+        escapedIdentifier = EscapeIdentifier(trimmed);
+        return true;
+    }
+
+    private static bool IsValidCSharpIdentifier(string identifier)
+    {
+        if (identifier.Length == 0)
+        {
+            return false;
+        }
+
+        var first = identifier[0];
+        if (!(first == '_' || char.IsLetter(first)))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < identifier.Length; i++)
+        {
+            var c = identifier[i];
+            if (!(c == '_' || char.IsLetterOrDigit(c)))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Decodes the unknown-markup-extension encoding written by
     /// <c>WpfSemanticBinder.TryBuildUnknownMarkupExtensionEncoding</c>.
@@ -250,6 +448,11 @@ internal static class CodeGenUtilities
             var dynKey = literalValue.Substring(dynOpen.Length, literalValue.Length - dynOpen.Length - 1).Trim();
             if (dynKey.StartsWith("{x:Static ", StringComparison.Ordinal) && dynKey.EndsWith("}", StringComparison.Ordinal))
             {
+                if (TryBuildXStaticDirectMemberAccessExpression(dynKey, out var directMemberAccess))
+                {
+                    return "new global::System.Windows.DynamicResourceExtension(" + directMemberAccess + ")";
+                }
+
                 return "new global::System.Windows.DynamicResourceExtension(__WXSG_ResolveXStatic(" + EscapeStringLiteral(dynKey) + "))";
             }
 
@@ -271,6 +474,13 @@ internal static class CodeGenUtilities
         if (literalValue.StartsWith("{x:Static ", StringComparison.Ordinal) &&
             literalValue.EndsWith("}", StringComparison.Ordinal))
         {
+            if (TryBuildXStaticDirectMemberAccessExpression(literalValue, out var directMemberAccess))
+            {
+                return normalizedType == "object" || normalizedType == "System.Object"
+                    ? directMemberAccess
+                    : "(" + QualifyType(normalizedType) + ")" + directMemberAccess;
+            }
+
             var callExpr = "__WXSG_ResolveXStatic(" + valueExpression + ")";
             return normalizedType == "object" || normalizedType == "System.Object"
                 ? callExpr

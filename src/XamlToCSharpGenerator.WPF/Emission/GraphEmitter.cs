@@ -121,7 +121,10 @@ internal sealed class GraphEmitter
                 string dynResKeyExpression;
                 if (dynResKey.StartsWith("{x:Static ", StringComparison.Ordinal) && dynResKey.EndsWith("}", StringComparison.Ordinal))
                 {
-                    dynResKeyExpression = "__WXSG_ResolveXStatic(\"" + dynResKey.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\")";
+                    if (!CodeGenUtilities.TryBuildXStaticDirectMemberAccessExpression(dynResKey, out dynResKeyExpression))
+                    {
+                        dynResKeyExpression = "__WXSG_ResolveXStatic(\"" + dynResKey.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\")";
+                    }
                 }
                 else
                 {
@@ -534,6 +537,11 @@ internal sealed class GraphEmitter
                 case XamlMarkupExtensionKind.StaticResource:
                     return "__WXSG_ResolveStaticResource(" + scopeExpression + ", " + quotedValue + ")";
                 case XamlMarkupExtensionKind.Static:
+                    if (CodeGenUtilities.TryBuildXStaticDirectMemberAccessExpression(trimmedValue, out var directMemberAccess))
+                    {
+                        return directMemberAccess;
+                    }
+
                     return "__WXSG_ResolveXStatic(" + quotedValue + ")";
                 case XamlMarkupExtensionKind.Type:
                     return CodeGenUtilities.ConvertLiteralExpression(quotedValue, "System.Type", scopeExpression);

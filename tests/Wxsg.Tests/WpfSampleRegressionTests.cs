@@ -198,7 +198,7 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
-    public void XStatic_CustomNs_Sample_Builds_And_Emits_XStatic_Token()
+    public void XStatic_CustomNs_Sample_Builds_And_Emits_Direct_Static_Member_Access()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -211,8 +211,14 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 
         var generatedCode = artifact.ReadGeneratedCSharp();
 
-        Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
-        Assert.Contains("CollectionsToComposite", generatedCode, StringComparison.Ordinal);
+        Assert.Contains(
+            "(global::System.Windows.Data.IMultiValueConverter)global::XStaticCustomNsSample.Converters.CollectionsToComposite",
+            generatedCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "__WXSG_ResolveXStatic(\"{x:Static clr-namespace:XStaticCustomNsSample:Converters.CollectionsToComposite}\")",
+            generatedCode,
+            StringComparison.Ordinal);
     }
 
     [Fact]
