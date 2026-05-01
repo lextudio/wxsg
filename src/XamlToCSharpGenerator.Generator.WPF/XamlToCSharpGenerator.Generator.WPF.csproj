@@ -15,6 +15,10 @@
     <Version Condition="'$(Version)' == '' and '$(GitVersion_NuGetVersionV2)' != ''">$(GitVersion_NuGetVersionV2)</Version>
     <Description>WPF XAML source generator (WXSG) — generates typed InitializeComponent from WPF Page items.</Description>
     <PackageTags>wpf;analyzer;generator;roslyn;xaml</PackageTags>
+    <PackageProjectUrl Condition="'$(PackageProjectUrl)' == ''">https://github.com/lextudio/wxsg</PackageProjectUrl>
+    <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/lextudio/wxsg</RepositoryUrl>
+    <RepositoryType Condition="'$(RepositoryType)' == ''">git</RepositoryType>
+    <PublishRepositoryUrl Condition="'$(PublishRepositoryUrl)' == ''">true</PublishRepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
