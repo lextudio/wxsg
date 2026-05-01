@@ -64,6 +64,18 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 // Read the assembly bytes into memory first so the file is not held open
                 // (PEReader keeps the stream open; we need to overwrite the file later)
                 var assemblyBytes = File.ReadAllBytes(AssemblyPath);
+
+                // Diagnostic snapshot: write pre-modification copy to temp for inspection
+                try
+                {
+                    var prePath = Path.Combine(Path.GetTempPath(), Path.GetFileName(AssemblyPath) + ".wxsg.pre");
+                    File.WriteAllBytes(prePath, assemblyBytes);
+                    Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: wrote pre-snapshot to '{0}'", prePath);
+                }
+                catch (Exception ex)
+                {
+                    Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: failed to write pre-snapshot: {0}", ex.Message);
+                }
                 var reader = new MutableAssemblyReader();
                 var assembly = reader.Read(new MemoryStream(assemblyBytes), new MutableReaderParameters { ReadMethodBodies = true });
                 assembly.MainModule.FileName = AssemblyPath;
@@ -88,21 +100,41 @@ namespace XamlToCSharpGenerator.Build.Tasks
                     return false;
                 }
 
-                // Parse existing .g.resources entries
-                var entries = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+                // Parse existing .g.resources entries and preserve their type names
+                var entries = new Dictionary<string, (string TypeName, byte[] Data)>(StringComparer.OrdinalIgnoreCase);
                 var existingData = gResources.GetResourceData();
-                using (var ms = new MemoryStream(existingData))
-                using (var resourceReader = new ResourceReader(ms))
+                try
                 {
-                    var enumerator = resourceReader.GetEnumerator();
-                    while (enumerator.MoveNext())
+                    using (var ms = new MemoryStream(existingData))
+                    using (var resourceReader = new ResourceReader(ms))
                     {
-                        var key = enumerator.Key?.ToString() ?? string.Empty;
-                        resourceReader.GetResourceData(key, out _, out var value);
-                        entries[key] = value;
-                        Log.LogMessage(MessageImportance.Low,
-                            "WxsgInjectBaml: existing resource key: '{0}' ({1} bytes)", key, value.Length);
+                        var enumerator = resourceReader.GetEnumerator();
+                        while (enumerator.MoveNext())
+                        {
+                            var key = enumerator.Key?.ToString() ?? string.Empty;
+                            resourceReader.GetResourceData(key, out var typeName, out var value);
+                            entries[key] = (typeName ?? string.Empty, value);
+                            Log.LogMessage(MessageImportance.Low,
+                                "WxsgInjectBaml: existing resource key: '{0}' type: '{1}' ({2} bytes)", key, typeName, value.Length);
+                        }
                     }
+
+                    // Diagnostic: write pre .g.resources snapshot
+                    try
+                    {
+                        var preGResPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(AssemblyPath) + ".g.resources.pre");
+                        File.WriteAllBytes(preGResPath, existingData);
+                        Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: wrote pre .g.resources snapshot to '{0}'", preGResPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: failed to write pre .g.resources snapshot: {0}", ex.Message);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: failed to read existing .g.resources: {0}", ex.Message);
+                    throw;
                 }
 
                 // Add/replace BAML entries
@@ -136,21 +168,34 @@ namespace XamlToCSharpGenerator.Build.Tasks
                     }
 
                     var bamlBytes = File.ReadAllBytes(bamlPath);
-                    entries[resourceKey] = CreateStreamResourceData(bamlBytes);
+                    const string streamTypeName = "ResourceTypeCode.Stream";
+                    entries[resourceKey] = (streamTypeName, CreateStreamResourceData(bamlBytes));
                     Log.LogMessage(MessageImportance.Normal,
-                        "WxsgInjectBaml: adding BAML key '{0}' ({1} bytes)", resourceKey, bamlBytes.Length);
+                        "WxsgInjectBaml: adding BAML key '{0}' type '{1}' ({2} bytes)", resourceKey, streamTypeName, bamlBytes.Length);
                 }
 
-                // Serialize updated resource set
+                // Serialize updated resource set (use preserved type names)
                 byte[] updatedData;
                 using (var ms = new MemoryStream())
                 {
                     using (var writer = new ResourceWriter(ms))
                     {
                         foreach (var kvp in entries)
-                            writer.AddResourceData(kvp.Key, "ResourceTypeCode.Stream", kvp.Value);
+                            writer.AddResourceData(kvp.Key, kvp.Value.TypeName, kvp.Value.Data);
                     }
                     updatedData = ms.ToArray();
+                }
+
+                // Diagnostic: write post .g.resources snapshot
+                try
+                {
+                    var postGResPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(AssemblyPath) + ".g.resources.post");
+                    File.WriteAllBytes(postGResPath, updatedData);
+                    Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: wrote post .g.resources snapshot to '{0}'", postGResPath);
+                }
+                catch (Exception ex)
+                {
+                    Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: failed to write post .g.resources snapshot: {0}", ex.Message);
                 }
 
                 // Replace the resource data in the module
@@ -161,8 +206,21 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 var tempPath = Path.Combine(Path.GetTempPath(), Path.GetFileNameWithoutExtension(AssemblyPath) + ".wxsg.tmp");
                 try
                 {
+                    Log.LogMessage(MessageImportance.Normal, "WxsgInjectBaml: module.Attributes={0}", assembly.MainModule.Attributes);
                     var writer2 = new MutableAssemblyWriter(assembly);
                     writer2.Write(tempPath);
+
+                    // Diagnostic snapshot: copy the temp output for inspection before overwriting
+                    try
+                    {
+                        var postPath = Path.Combine(Path.GetTempPath(), Path.GetFileName(AssemblyPath) + ".wxsg.post");
+                        File.Copy(tempPath, postPath, overwrite: true);
+                        Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: wrote post-snapshot to '{0}'", postPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: failed to write post-snapshot: {0}", ex.Message);
+                    }
 
                     // Overwrite the original assembly
                     File.Copy(tempPath, AssemblyPath, overwrite: true);
