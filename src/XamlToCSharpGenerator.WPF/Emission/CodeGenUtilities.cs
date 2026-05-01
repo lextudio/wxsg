@@ -353,8 +353,8 @@ internal static class CodeGenUtilities
         }
 
         var runtimeType = ResolveRuntimeType(normalizedType);
-        if (runtimeType is not null &&
-            IsWpfDependencyObjectLike(runtimeType) &&
+           if ((runtimeType is not null && IsWpfDependencyObjectLike(runtimeType) ||
+               IsWpfDependencyObjectTypeName(normalizedType)) &&
             !string.IsNullOrWhiteSpace(scopeExpression) &&
             literalValue.Length > 0 &&
             literalValue.IndexOfAny(new[] { '{', '}', '.', '/', '\\', ':', ',', ' ' }) < 0)
@@ -531,6 +531,18 @@ internal static class CodeGenUtilities
         }
 
         return false;
+    }
+
+    private static bool IsWpfDependencyObjectTypeName(string normalizedType)
+    {
+        return normalizedType == "System.Windows.DependencyObject" ||
+               normalizedType == "System.Windows.UIElement" ||
+               normalizedType == "System.Windows.FrameworkElement" ||
+               normalizedType == "System.Windows.FrameworkContentElement" ||
+               normalizedType == "DependencyObject" ||
+               normalizedType == "UIElement" ||
+               normalizedType == "FrameworkElement" ||
+               normalizedType == "FrameworkContentElement";
     }
 
     internal static string? ResolveRuntimePropertyTypeName(string? ownerTypeName, string propertyName)
