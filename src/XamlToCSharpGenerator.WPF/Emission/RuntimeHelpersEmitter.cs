@@ -434,7 +434,6 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "                    }");
         sb.AppendLine(i + "                    // Search loaded assemblies, prioritizing the target assembly");
         sb.AppendLine(i + "                    var __allAssemblies = global::System.AppDomain.CurrentDomain.GetAssemblies();");
-        sb.AppendLine(i + "                    global::System.Console.WriteLine($\"[WXSG-DEBUG] Searching for '{__fullyQualifiedTypeName}' in {__allAssemblies.Length} assemblies (target: {__targetAsmName})\");");
         sb.AppendLine(i + "                    if (!string.IsNullOrEmpty(__targetAsmName))");
         sb.AppendLine(i + "                    {");
         sb.AppendLine(i + "                        foreach (var __asm in __allAssemblies)");
@@ -442,10 +441,7 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "                            var __asmName = __asm.GetName().Name;");
         sb.AppendLine(i + "                            if (string.Equals(__asmName, __targetAsmName, global::System.StringComparison.Ordinal))");
         sb.AppendLine(i + "                            {");
-        sb.AppendLine(i + "                                global::System.Console.WriteLine($\"[WXSG-DEBUG] Found target assembly '{__asmName}'\");");
         sb.AppendLine(i + "                                __qualifiedOwnerType = __asm.GetType(__fullyQualifiedTypeName, throwOnError: false);");
-        sb.AppendLine(i + "                                var __lookupStatus = __qualifiedOwnerType != null ? \"SUCCESS\" : \"FAILED\";");
-        sb.AppendLine(i + "                                global::System.Console.WriteLine($\"[WXSG-DEBUG] Type lookup: {__lookupStatus}\");");
         sb.AppendLine(i + "                                if (__qualifiedOwnerType is not null) break;");
         sb.AppendLine(i + "                            }");
         sb.AppendLine(i + "                        }");
@@ -466,6 +462,11 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "                    if (__qualifiedProp is not null) return __qualifiedProp.GetValue(null);");
         sb.AppendLine(i + "                    var __qualifiedField = __qualifiedOwnerType.GetField(__qualifiedMemberName, __qualifiedFlags);");
         sb.AppendLine(i + "                    if (__qualifiedField is not null) return __qualifiedField.GetValue(null);");
+        sb.AppendLine(i + "                    var __qualifiedAltMember = __qualifiedMemberName + \"Key\";");
+        sb.AppendLine(i + "                    var __qualifiedAltProp = __qualifiedOwnerType.GetProperty(__qualifiedAltMember, __qualifiedFlags);");
+        sb.AppendLine(i + "                    if (__qualifiedAltProp is not null) return __qualifiedAltProp.GetValue(null);");
+        sb.AppendLine(i + "                    var __qualifiedAltField = __qualifiedOwnerType.GetField(__qualifiedAltMember, __qualifiedFlags);");
+        sb.AppendLine(i + "                    if (__qualifiedAltField is not null) return __qualifiedAltField.GetValue(null);");
         sb.AppendLine(i + "                }");
         sb.AppendLine(i + "            }");
         sb.AppendLine(i + "        }");
@@ -544,6 +545,17 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "    if (__field is not null)");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        return __field.GetValue(null);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    var __altMemberName = __memberName + \"Key\";");
+        sb.AppendLine(i + "    var __altProp = __ownerType.GetProperty(__altMemberName, __flags);");
+        sb.AppendLine(i + "    if (__altProp is not null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __altProp.GetValue(null);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    var __altField = __ownerType.GetField(__altMemberName, __flags);");
+        sb.AppendLine(i + "    if (__altField is not null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __altField.GetValue(null);");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "    throw new global::System.InvalidOperationException(\"Unable to resolve x:Static member '\" + __memberName + \"' on type '\" + __typeName + \"'.\");");
         sb.AppendLine(i + "}");

@@ -230,6 +230,7 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         var generatedCode = artifact.ReadGeneratedCSharp();
 
         Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("__altMemberName = __memberName + \"Key\"", generatedCode, StringComparison.Ordinal);
 
         var repositoryRoot = GetWxsgRepositoryRoot();
         var rawDeferredXaml = Path.Combine(
