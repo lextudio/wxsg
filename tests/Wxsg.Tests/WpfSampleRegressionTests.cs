@@ -427,6 +427,27 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
+    public void WpfEmitter_Uses_WpfDoubleParser_For_UnitSuffixed_Double_Literals()
+    {
+        var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
+        var utilitiesType = generatorAssembly.GetType(
+            "XamlToCSharpGenerator.WPF.Emission.CodeGenUtilities",
+            throwOnError: true);
+
+        var method = utilitiesType!.GetMethod(
+            "ConvertLiteralExpression",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var converted = method!.Invoke(
+            null,
+            new object[] { "\"10pt\"", "System.Double", null! }) as string;
+
+        Assert.Equal("__WXSG_ParseWpfDouble(\"10pt\")", converted);
+    }
+
+    [Fact]
     public void WpfEmitter_Resolves_StaticResource_In_Binding_Source_Arguments()
     {
         var generatorAssembly = BuildAndLoadWpfEmitterAssembly();

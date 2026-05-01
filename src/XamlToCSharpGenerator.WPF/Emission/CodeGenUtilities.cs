@@ -315,7 +315,7 @@ internal static class CodeGenUtilities
         {
             return double.TryParse(literalValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var doubleValue)
                 ? BuildDoubleLiteralExpression(doubleValue)
-                : ConvertViaTypeConverter(normalizedType, valueExpression);
+                : "__WXSG_ParseWpfDouble(" + valueExpression + ")";
         }
 
         if (normalizedType == "float" || normalizedType == "System.Single")

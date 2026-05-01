@@ -11,10 +11,65 @@ internal static class RuntimeHelpersEmitter
         EmitRoutedEventHelper(emitter);
         EmitStaticResourceHelper(emitter);
         EmitXStaticHelper(emitter, docClassFullName);
+        EmitWpfDoubleParserHelper(emitter);
         EmitSetterValueHelper(emitter);
         EmitUnknownMarkupExtensionHelper(emitter);
         EmitTrySetBindingHelper(emitter);
         EmitWpfCommandResolver(emitter, docClassFullName);
+    }
+
+    private static void EmitWpfDoubleParserHelper(GraphEmitter emitter)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        sb.AppendLine(i + "private static double __WXSG_ParseWpfDouble(string __raw)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (__raw is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        throw new global::System.ArgumentNullException(nameof(__raw));");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    var __text = __raw.Trim();");
+        sb.AppendLine(i + "    if (global::System.Double.TryParse(__text, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var __plain))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __plain;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    var __factor = 1D;");
+        sb.AppendLine(i + "    if (__text.EndsWith(\"pt\", global::System.StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __factor = 96D / 72D;");
+        sb.AppendLine(i + "        __text = __text.Substring(0, __text.Length - 2).TrimEnd();");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__text.EndsWith(\"in\", global::System.StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __factor = 96D;");
+        sb.AppendLine(i + "        __text = __text.Substring(0, __text.Length - 2).TrimEnd();");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__text.EndsWith(\"cm\", global::System.StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __factor = 96D / 2.54D;");
+        sb.AppendLine(i + "        __text = __text.Substring(0, __text.Length - 2).TrimEnd();");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__text.EndsWith(\"mm\", global::System.StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __factor = 96D / 25.4D;");
+        sb.AppendLine(i + "        __text = __text.Substring(0, __text.Length - 2).TrimEnd();");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__text.EndsWith(\"px\", global::System.StringComparison.OrdinalIgnoreCase))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __text = __text.Substring(0, __text.Length - 2).TrimEnd();");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    if (global::System.Double.TryParse(__text, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var __value))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __value * __factor;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    return (double)global::System.ComponentModel.TypeDescriptor.GetConverter(typeof(double)).ConvertFromInvariantString(__raw);");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
     }
 
     private static void EmitTypeTokenHelper(GraphEmitter emitter)
@@ -526,6 +581,11 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "    if (__targetType == typeof(string))");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        return __text;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    if (__targetType == typeof(double) || __targetType == typeof(global::System.Nullable<double>))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return __WXSG_ParseWpfDouble(__text);");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "");
         sb.AppendLine(i + "    try");
