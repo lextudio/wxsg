@@ -41,6 +41,8 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         InitializePoweredByAttribution(context);
     }
 
+    private const string AppDefinitionGroup = "ApplicationDefinition";
+
     private static void InitializeClasslessThemeLoader(IncrementalGeneratorInitializationContext context)
     {
         // Collect TargetPath metadata for all AdditionalFiles with SourceItemGroup=ClasslessPage.
@@ -72,20 +74,51 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
             .Where(static p => p is not null)
             .Select(static (p, _) => p!);
 
+        // Also collect the content of the ApplicationDefinition XAML (App.xaml) so that
+        // at generator time we can determine which resource directories the application is
+        // already managing via its own MergedDictionaries declarations.
+        var appXamlContents = context.AdditionalTextsProvider
+            .Combine(context.AnalyzerConfigOptionsProvider)
+            .Select(static (pair, ct) =>
+            {
+                var text = pair.Left;
+                var optionsProvider = pair.Right;
+
+                if (!text.Path.EndsWith(".xaml", System.StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                var options = optionsProvider.GetOptions(text);
+                options.TryGetValue(SourceItemGroupMetadataKey, out var sourceItemGroup);
+                if (!string.Equals(sourceItemGroup, AppDefinitionGroup, System.StringComparison.OrdinalIgnoreCase))
+                    return null;
+
+                return text.GetText(ct)?.ToString();
+            })
+            .Where(static c => c is not null)
+            .Select(static (c, _) => c!);
+
         var classlessSnapshot = classlessPaths.Collect();
+        var appXamlSnapshot = appXamlContents.Collect();
 
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? string.Empty);
 
-        var combined = classlessSnapshot.Combine(assemblyName);
+        var combined = classlessSnapshot.Combine(appXamlSnapshot).Combine(assemblyName);
 
         context.RegisterSourceOutput(combined, static (spc, pair) =>
         {
-            var paths = pair.Left;
+            var paths = pair.Left.Left;
+            var appXamls = pair.Left.Right;
             var asmName = pair.Right;
 
             if (paths.IsDefaultOrEmpty || string.IsNullOrEmpty(asmName))
                 return;
+
+            // Determine which component-relative directories are already declared in the
+            // application's own MergedDictionaries (App.xaml). ClasslessPages whose directory
+            // is managed by the app are theme variants selected at runtime — auto-merging all
+            // of them would leave stale variants in Application.Resources after a theme switch.
+            var appManagedDirs = ExtractAppManagedDirectories(appXamls, asmName);
 
             // Emit ModuleInitializerAttribute polyfill so [ModuleInitializer] compiles on
             // .NET Framework 4.x targets where System.Runtime.CompilerServices does not yet
@@ -99,8 +132,75 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
             spc.AddSource("__WxsgClasslessXamlLoader.wpf.g.cs", BuildClasslessXamlLoaderSource(asmName));
 
             // Emit the actual theme loader.
-            spc.AddSource("__WxsgThemeLoader.wpf.g.cs", BuildThemeLoaderSource(asmName, paths));
+            spc.AddSource("__WxsgThemeLoader.wpf.g.cs", BuildThemeLoaderSource(asmName, paths, appManagedDirs));
         });
+    }
+
+    /// <summary>
+    /// Parses one or more App.xaml texts and returns the set of component-relative directories
+    /// (forward-slash separated, no leading slash) that the application explicitly loads via
+    /// its own <c>MergedDictionaries</c>. For example, if App.xaml contains
+    /// <c>Source="pack://application:,,,/MyApp;component/Themes/DarkTheme.xaml"</c>, the
+    /// returned set will include <c>"Themes"</c>.
+    ///
+    /// ClasslessPages that live in one of these directories are assumed to be theme variants
+    /// managed by the application at runtime (e.g. switched by a ThemeManager) and must NOT
+    /// be auto-merged by the WXSG module initializer.
+    /// </summary>
+    private static System.Collections.Generic.HashSet<string> ExtractAppManagedDirectories(
+        ImmutableArray<string> appXamls, string assemblyName)
+    {
+        var dirs = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        // Match both the full pack URI form and the bare component-relative form:
+        //   pack://application:,,,/AssemblyName;component/Themes/Foo.xaml
+        //   /AssemblyName;component/Themes/Foo.xaml
+        var componentPrefix1 = $"pack://application:,,,/{assemblyName};component/";
+        var componentPrefix2 = $"/{assemblyName};component/";
+
+        foreach (var xaml in appXamls)
+        {
+            if (string.IsNullOrWhiteSpace(xaml))
+                continue;
+
+            foreach (var prefix in new[] { componentPrefix1, componentPrefix2 })
+            {
+                int pos = 0;
+                while (true)
+                {
+                    int idx = xaml.IndexOf(prefix, pos, System.StringComparison.OrdinalIgnoreCase);
+                    if (idx < 0) break;
+
+                    int pathStart = idx + prefix.Length;
+                    // Find the closing quote/apostrophe that bounds the URI value.
+                    int end = xaml.Length;
+                    for (int i = pathStart; i < xaml.Length; i++)
+                    {
+                        char ch = xaml[i];
+                        if (ch == '"' || ch == '\'' || ch == '<' || ch == '>')
+                        {
+                            end = i;
+                            break;
+                        }
+                    }
+
+                    var componentPath = xaml.Substring(pathStart, end - pathStart).Trim();
+                    // Normalize backslashes and strip query/fragment
+                    componentPath = componentPath.Replace('\\', '/');
+                    int qmark = componentPath.IndexOf('?');
+                    if (qmark >= 0) componentPath = componentPath.Substring(0, qmark);
+                    int hash = componentPath.IndexOf('#');
+                    if (hash >= 0) componentPath = componentPath.Substring(0, hash);
+
+                    int lastSlash = componentPath.LastIndexOf('/');
+                    if (lastSlash > 0)
+                        dirs.Add(componentPath.Substring(0, lastSlash));
+
+                    pos = end;
+                }
+            }
+        }
+
+        return dirs;
     }
 
     private static void InitializePoweredByAttribution(IncrementalGeneratorInitializationContext context)
@@ -237,7 +337,8 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
             """;
     }
 
-    private static string BuildThemeLoaderSource(string assemblyName, ImmutableArray<string> targetPaths)
+    private static string BuildThemeLoaderSource(string assemblyName, ImmutableArray<string> targetPaths,
+        System.Collections.Generic.HashSet<string> appManagedDirs)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated/>");
@@ -307,7 +408,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         foreach (var path in targetPaths)
         {
-            if (ShouldSkipAutoMergingThemeVariant(path))
+            if (ShouldSkipAutoMergingThemeVariant(path, appManagedDirs))
             {
                 continue;
             }
@@ -342,23 +443,48 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         return sb.ToString();
     }
 
-    private static bool ShouldSkipAutoMergingThemeVariant(string path)
+    /// <summary>
+    /// Decides whether a ClasslessPage should be excluded from the auto-merge performed by
+    /// the WXSG module initializer.  The rule has two layers, from most to least specific:
+    ///
+    /// 1. <b>App-managed directories</b> (primary, structural): if the application's
+    ///    App.xaml declares at least one resource from a given directory (e.g.
+    ///    <c>Themes/DarkBrushsExtended.xaml</c> → directory <c>Themes</c>), then ALL
+    ///    ClasslessPages in that same directory are considered runtime-managed theme
+    ///    variants and are skipped.  The application itself is responsible for loading
+    ///    the correct variant at the right time (e.g. via a ThemeManager).
+    ///
+    /// 2. <b>WPF naming convention</b> (fallback): files inside a <c>Themes/</c> folder
+    ///    whose name starts with <c>Theme.</c> or <c>Base.</c> follow the standard WPF
+    ///    resource-dictionary naming scheme (<c>Theme.Dark.xaml</c>, <c>Base.xaml</c>…).
+    ///    These are always runtime-selected and are skipped unconditionally, even when
+    ///    App.xaml does not reference them (e.g. the ThemeManager adds them dynamically).
+    /// </summary>
+    private static bool ShouldSkipAutoMergingThemeVariant(
+        string path,
+        System.Collections.Generic.HashSet<string> appManagedDirs)
     {
         if (string.IsNullOrWhiteSpace(path))
             return false;
 
         var normalized = path.Replace('\\', '/');
+
+        // Layer 1: structural — skip anything in a directory the app already manages.
+        var lastSlash = normalized.LastIndexOf('/');
+        if (lastSlash > 0)
+        {
+            var dir = normalized.Substring(0, lastSlash);
+            if (appManagedDirs.Contains(dir))
+                return true;
+        }
+
+        // Layer 2: WPF naming convention — Theme.* / Base.* inside Themes/.
         if (!normalized.StartsWith("Themes/", System.StringComparison.OrdinalIgnoreCase))
             return false;
 
         var fileName = System.IO.Path.GetFileName(normalized);
-        if (fileName is null)
-            return false;
-
-        // Variant theme dictionaries are selected explicitly at runtime (for example by a
-        // ThemeManager). Auto-merging all variants causes key collisions and stale theme values.
         return fileName.StartsWith("Theme.", System.StringComparison.OrdinalIgnoreCase)
-               || fileName.StartsWith("Base.", System.StringComparison.OrdinalIgnoreCase);
+            || fileName.StartsWith("Base.", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildClasslessXamlLoaderSource(string assemblyName)

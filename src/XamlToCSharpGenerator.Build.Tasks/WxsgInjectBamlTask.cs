@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Resources;
+using System.Threading;
 using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 using LeXtudio.Metadata.Mutable;
@@ -80,6 +81,10 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 var assembly = reader.Read(new MemoryStream(assemblyBytes), new MutableReaderParameters { ReadMethodBodies = true });
                 assembly.MainModule.FileName = AssemblyPath;
                 var module = assembly.MainModule;
+                if (reader is IDisposable readerDisposable)
+                {
+                    readerDisposable.Dispose();
+                }
 
                 // Find the .g.resources embedded resource
                 MutableEmbeddedResource? gResources = null;
@@ -207,8 +212,16 @@ namespace XamlToCSharpGenerator.Build.Tasks
                 try
                 {
                     Log.LogMessage(MessageImportance.Normal, "WxsgInjectBaml: module.Attributes={0}", assembly.MainModule.Attributes);
-                    var writer2 = new MutableAssemblyWriter(assembly);
-                    writer2.Write(tempPath);
+                    MutableAssemblyWriter writer2 = null;
+                    try
+                    {
+                        writer2 = new MutableAssemblyWriter(assembly);
+                        writer2.Write(tempPath);
+                    }
+                    finally
+                    {
+                        if (writer2 is IDisposable w) w.Dispose();
+                    }
 
                     // Diagnostic snapshot: copy the temp output for inspection before overwriting
                     try
@@ -222,8 +235,31 @@ namespace XamlToCSharpGenerator.Build.Tasks
                         Log.LogMessage(MessageImportance.Low, "WxsgInjectBaml: failed to write post-snapshot: {0}", ex.Message);
                     }
 
-                    // Overwrite the original assembly
-                    File.Copy(tempPath, AssemblyPath, overwrite: true);
+                    // Overwrite the original assembly (retry to avoid transient file-locks)
+                    const int MaxAttempts = 5;
+                    var copied = false;
+                    for (var attempt = 1; attempt <= MaxAttempts; attempt++)
+                    {
+                        try
+                        {
+                            File.Copy(tempPath, AssemblyPath, overwrite: true);
+                            copied = true;
+                            break;
+                        }
+                        catch (IOException) when (attempt < MaxAttempts)
+                        {
+                            Thread.Sleep(200);
+                        }
+                        catch (UnauthorizedAccessException) when (attempt < MaxAttempts)
+                        {
+                            Thread.Sleep(200);
+                        }
+                    }
+                    if (!copied)
+                    {
+                        // Final attempt to throw the actual exception if any
+                        File.Copy(tempPath, AssemblyPath, overwrite: true);
+                    }
                 }
                 finally
                 {
