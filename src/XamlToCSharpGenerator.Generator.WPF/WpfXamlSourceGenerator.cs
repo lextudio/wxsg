@@ -307,6 +307,11 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("        {");
         foreach (var path in targetPaths)
         {
+            if (ShouldSkipAutoMergingThemeVariant(path))
+            {
+                continue;
+            }
+
             var packUri = $"pack://application:,,,/{assemblyName};component/{path}";
             sb.AppendLine($"            MergeDict(app, \"{packUri}\");");
         }
@@ -335,6 +340,25 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    private static bool ShouldSkipAutoMergingThemeVariant(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        var normalized = path.Replace('\\', '/');
+        if (!normalized.StartsWith("Themes/", System.StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var fileName = System.IO.Path.GetFileName(normalized);
+        if (fileName is null)
+            return false;
+
+        // Variant theme dictionaries are selected explicitly at runtime (for example by a
+        // ThemeManager). Auto-merging all variants causes key collisions and stale theme values.
+        return fileName.StartsWith("Theme.", System.StringComparison.OrdinalIgnoreCase)
+               || fileName.StartsWith("Base.", System.StringComparison.OrdinalIgnoreCase);
     }
 
     private static string BuildClasslessXamlLoaderSource(string assemblyName)

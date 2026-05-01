@@ -133,6 +133,10 @@ internal sealed class GraphEmitter
                     ? CodeGenUtilities.QualifyType(dynResFrameworkOwner) + "."
                     : string.Empty;
                 var dynResDpExpr = dynResDpOwner + assignment.PropertyName + "Property";
+                var dynResPropNameLiteral = "\"" + assignment.PropertyName.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+                var dynResOwnerTypeLiteral = string.IsNullOrWhiteSpace(dynResFrameworkOwner)
+                    ? "null"
+                    : "\"" + dynResFrameworkOwner.Replace("global::", string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
                 if (string.Equals(instanceVariable, "this", StringComparison.Ordinal))
                 {
@@ -143,21 +147,23 @@ internal sealed class GraphEmitter
                 }
                 else if (!string.IsNullOrWhiteSpace(dynResFrameworkOwner))
                 {
-                    // Attached property on non-root: use the owner type's static setter.
+                    // Attached property on non-root: keep it dynamic when possible, fallback to static value.
                     var dynResTypeName = CodeGenUtilities.QualifyType(assignment.ClrPropertyTypeName ?? "object");
                     Builder.AppendLine(
                         MemberIndent + "    " +
-                        "{ var __dynResVal = global::System.Windows.Application.Current?.TryFindResource(" + dynResKeyExpression + "); " +
+                        "if (!__WXSG_TrySetDynamicResourceReference(" + instanceVariable + ", " + dynResPropNameLiteral + ", " + dynResOwnerTypeLiteral + ", " + dynResKeyExpression + ")) " +
+                        "{ var __dynResVal = __WXSG_FindResourceInScope(" + instanceVariable + ", " + dynResKeyExpression + "); " +
                         "if (__dynResVal is " + dynResTypeName + " __dynResCast) " +
                         CodeGenUtilities.QualifyType(dynResFrameworkOwner) + ".Set" + assignment.PropertyName + "(" + instanceVariable + ", __dynResCast); }");
                 }
                 else if (!string.IsNullOrWhiteSpace(assignment.ClrPropertyTypeName))
                 {
-                    // Non-root object (e.g. GradientStop, Freezable) — static TryFindResource at init time.
+                    // Non-root object (e.g. control descendants): keep dynamic when possible, otherwise snapshot.
                     var dynResTypeName = CodeGenUtilities.QualifyType(assignment.ClrPropertyTypeName);
                     Builder.AppendLine(
                         MemberIndent + "    " +
-                        "{ var __dynResVal = global::System.Windows.Application.Current?.TryFindResource(" + dynResKeyExpression + "); " +
+                        "if (!__WXSG_TrySetDynamicResourceReference(" + instanceVariable + ", " + dynResPropNameLiteral + ", null, " + dynResKeyExpression + ")) " +
+                        "{ var __dynResVal = __WXSG_FindResourceInScope(" + instanceVariable + ", " + dynResKeyExpression + "); " +
                         "if (__dynResVal is " + dynResTypeName + " __dynResCast) " +
                         instanceVariable + "." + assignment.PropertyName + " = __dynResCast; }");
                 }

@@ -1,9 +1,11 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Reflection;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using System.Windows.Threading;
@@ -19,6 +21,7 @@ internal static class Program
     {
         Directory.SetCurrentDirectory(XamlDesignerProject);
         AppDomain.CurrentDomain.AssemblyResolve += ResolveFromXamlDesignerOutput;
+        EnableBindingDiagnostics();
 
         var app = Application.Current ?? new Application();
         app.DispatcherUnhandledException += (_, e) =>
@@ -35,6 +38,7 @@ internal static class Program
         var windowType = assembly.GetType("ICSharpCode.XamlDesigner.MainWindow", throwOnError: true)!;
         var window = (Window)Activator.CreateInstance(windowType)!;
         window.Show();
+        DumpResourceDictionaries("Application.Current.Resources", Application.Current?.Resources, depth: 0, maxDepth: 2, maxKeysPerDictionary: 20);
 
         Pump();
         Pump();
@@ -45,11 +49,44 @@ internal static class Program
         DumpSharedInstancesGenericCctorIl();
         DumpWindowCloneCctorIl();
         DumpWindow(window);
+        DumpRuntimeInternals(window);
         DumpAssemblyResources("ICSharpCode.WpfDesign.Designer");
 
         window.Close();
         app.Shutdown();
         return 0;
+    }
+
+    private static void EnableBindingDiagnostics()
+    {
+        var source = PresentationTraceSources.DataBindingSource;
+        source.Switch.Level = SourceLevels.Warning | SourceLevels.Error;
+        if (!source.Listeners.OfType<OutlineTraceListener>().Any())
+        {
+            source.Listeners.Add(new OutlineTraceListener());
+        }
+
+        PresentationTraceSources.Refresh();
+        Console.WriteLine("Binding diagnostics enabled (Warning+Error).");
+    }
+
+    private sealed class OutlineTraceListener : TraceListener
+    {
+        public override void Write(string? message)
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                Console.Write("[binding] " + message);
+            }
+        }
+
+        public override void WriteLine(string? message)
+        {
+            if (!string.IsNullOrWhiteSpace(message))
+            {
+                Console.WriteLine("[binding] " + message);
+            }
+        }
     }
 
     private static void EnsureNewDocument(Assembly xamlDesignerAssembly)
@@ -275,6 +312,14 @@ internal static class Program
         }
     }
 
+    private static void DumpRuntimeInternals(Window window)
+    {
+        Console.WriteLine("=== Runtime XAML Internals ===");
+        DumpResourceDictionaries("Window.Resources", window.Resources, depth: 0, maxDepth: 2, maxKeysPerDictionary: 20);
+        DumpElementRuntimeState("Window", window);
+        DumpVisualTreeSnapshot(window, maxDepth: 4, maxChildrenPerNode: 25);
+    }
+
     private static void DumpXamlErrors(object? currentDocument)
     {
         var errorService = GetPropertyValue(currentDocument, "XamlErrorService");
@@ -349,6 +394,207 @@ internal static class Program
             Console.WriteLine($"Outline[{index}].OutlineTreeView.Template: " + Describe((treeElement as Control)?.Template));
             Console.WriteLine($"Outline[{index}].OutlineTreeView.Style: " + Describe(treeElement.Style));
             DumpBinding("OutlineTreeView.Root", treeElement, GetDependencyProperty(outlineTreeView.GetType().BaseType ?? outlineTreeView.GetType(), "RootProperty"));
+            DumpElementRuntimeState($"Outline[{index}].OutlineTreeView", treeElement);
+        }
+
+        if (outline is FrameworkElement outlineElement)
+        {
+            DumpElementRuntimeState($"Outline[{index}]", outlineElement);
+        }
+    }
+
+    private static void DumpElementRuntimeState(string label, FrameworkElement element)
+    {
+        Console.WriteLine("--- " + label + " internals ---");
+        Console.WriteLine(label + ".Name: " + Describe(element.Name));
+        Console.WriteLine(label + ".IsLoaded: " + Describe(element.IsLoaded));
+        Console.WriteLine(label + ".DataContext: " + Describe(element.DataContext));
+        Console.WriteLine(label + ".TemplatedParent: " + Describe(element.TemplatedParent));
+        Console.WriteLine(label + ".Style: " + Describe(element.Style));
+        Console.WriteLine(label + ".Resources.Count: " + Describe(element.Resources?.Count));
+
+        if (element is Control control)
+        {
+            Console.WriteLine(label + ".Template: " + Describe(control.Template));
+        }
+
+        DumpResourceProbe(label, element);
+        DumpLocalValueSources(label, element, maxEntries: 50);
+        DumpNameScope(label, element);
+    }
+
+    private static void DumpResourceProbe(string label, FrameworkElement element)
+    {
+        var keys = new object[]
+        {
+            SystemColors.ControlBrushKey,
+            SystemColors.ControlTextBrushKey,
+            SystemColors.WindowBrushKey,
+            SystemColors.WindowTextBrushKey,
+            SystemColors.MenuBrushKey,
+            SystemColors.MenuTextBrushKey
+        };
+
+        Console.WriteLine(label + ".ResourceProbe:");
+        foreach (var key in keys)
+        {
+            Console.WriteLine("  " + Describe(key) + " => " + Describe(TryFindResource(element, key)));
+        }
+    }
+
+    private static void DumpResourceDictionaries(string label, ResourceDictionary? dictionary, int depth, int maxDepth, int maxKeysPerDictionary)
+    {
+        var seen = new HashSet<ResourceDictionary>(ReferenceEqualityComparer.Instance);
+        Dump(label, dictionary, depth);
+        return;
+
+        void Dump(string currentLabel, ResourceDictionary? currentDictionary, int currentDepth)
+        {
+            var indent = new string(' ', currentDepth * 2);
+            if (currentDictionary == null)
+            {
+                Console.WriteLine(indent + currentLabel + ": <null>");
+                return;
+            }
+
+            if (!seen.Add(currentDictionary))
+            {
+                Console.WriteLine(indent + currentLabel + ": <already visited>");
+                return;
+            }
+
+            Console.WriteLine(indent + currentLabel + ": " + Describe(currentDictionary));
+            Console.WriteLine(indent + "  Source: " + Describe(currentDictionary.Source));
+            Console.WriteLine(indent + "  Keys.Count: " + Describe(currentDictionary.Keys.Count));
+
+            var keyCount = 0;
+            foreach (var key in currentDictionary.Keys)
+            {
+                keyCount++;
+                if (keyCount > maxKeysPerDictionary)
+                {
+                    Console.WriteLine(indent + "  ... keys truncated after " + maxKeysPerDictionary);
+                    break;
+                }
+
+                Console.WriteLine(indent + "  key[" + keyCount + "]: " + Describe(key));
+            }
+
+            if (currentDepth >= maxDepth)
+            {
+                Console.WriteLine(indent + "  merged dictionaries truncated at depth " + maxDepth);
+                return;
+            }
+
+            var merged = currentDictionary.MergedDictionaries;
+            for (var i = 0; i < merged.Count; i++)
+            {
+                Dump(currentLabel + ".Merged[" + i + "]", merged[i], currentDepth + 1);
+            }
+        }
+    }
+
+    private static void DumpLocalValueSources(string label, DependencyObject element, int maxEntries)
+    {
+        var localValues = element.GetLocalValueEnumerator();
+        var count = 0;
+        while (localValues.MoveNext())
+        {
+            count++;
+            if (count > maxEntries)
+            {
+                Console.WriteLine(label + ".LocalValues: truncated after " + maxEntries + " entries.");
+                break;
+            }
+
+            var entry = localValues.Current;
+            var property = entry.Property;
+            var source = DependencyPropertyHelper.GetValueSource(element, property);
+            Console.WriteLine(label + ".LocalValue[" + count + "] " + property.OwnerType.Name + "." + property.Name + ": " + Describe(entry.Value));
+            Console.WriteLine("  ValueSource: Base=" + source.BaseValueSource + ", IsExpression=" + source.IsExpression + ", IsAnimated=" + source.IsAnimated + ", IsCoerced=" + source.IsCoerced + ", IsCurrent=" + source.IsCurrent);
+
+            var bindingExpression = BindingOperations.GetBindingExpressionBase(element, property);
+            if (bindingExpression != null)
+            {
+                Console.WriteLine("  BindingExpression: " + Describe(bindingExpression));
+                Console.WriteLine("  BindingStatus: " + Describe(GetPropertyValue(bindingExpression, "Status")));
+            }
+        }
+
+        if (count == 0)
+        {
+            Console.WriteLine(label + ".LocalValues: <none>");
+        }
+    }
+
+    private static void DumpNameScope(string label, FrameworkElement element)
+    {
+        var nameScope = NameScope.GetNameScope(element);
+        Console.WriteLine(label + ".NameScope: " + Describe(nameScope));
+        if (nameScope == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var mapField = nameScope.GetType().GetField("_nameMap", BindingFlags.Instance | BindingFlags.NonPublic)
+                ?? nameScope.GetType().GetField("_entries", BindingFlags.Instance | BindingFlags.NonPublic);
+            var map = mapField?.GetValue(nameScope) as IDictionary;
+            if (map == null)
+            {
+                Console.WriteLine(label + ".NameScope entries: <not enumerable>");
+                return;
+            }
+
+            var index = 0;
+            foreach (DictionaryEntry entry in map)
+            {
+                index++;
+                Console.WriteLine(label + ".NameScope[" + index + "]: " + Describe(entry.Key) + " => " + Describe(entry.Value));
+            }
+
+            if (index == 0)
+            {
+                Console.WriteLine(label + ".NameScope entries: <empty>");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(label + ".NameScope inspection failed: " + ex.GetType().Name + ": " + ex.Message);
+        }
+    }
+
+    private static void DumpVisualTreeSnapshot(DependencyObject root, int maxDepth, int maxChildrenPerNode)
+    {
+        Console.WriteLine("Visual tree snapshot (depth <= " + maxDepth + "):");
+        DumpNode(root, depth: 0);
+
+        void DumpNode(DependencyObject node, int depth)
+        {
+            var indent = new string(' ', depth * 2);
+            var name = (node as FrameworkElement)?.Name;
+            Console.WriteLine(indent + "- " + node.GetType().FullName + (string.IsNullOrWhiteSpace(name) ? string.Empty : " #" + name));
+
+            if (depth >= maxDepth)
+            {
+                return;
+            }
+
+            if (node is Visual or Visual3D)
+            {
+                var childCount = VisualTreeHelper.GetChildrenCount(node);
+                var max = Math.Min(childCount, maxChildrenPerNode);
+                for (var i = 0; i < max; i++)
+                {
+                    DumpNode(VisualTreeHelper.GetChild(node, i), depth + 1);
+                }
+
+                if (childCount > maxChildrenPerNode)
+                {
+                    Console.WriteLine(indent + "  ... children truncated after " + maxChildrenPerNode + " nodes");
+                }
+            }
         }
     }
 

@@ -17,7 +17,7 @@
   </ItemGroup>
   <ItemGroup Condition="'$(UseNuGetPackage)' == 'true'">
     <!-- Prefer consuming the packed NuGet package instead of a local project ref -->
-    <PackageReference Include="LeXtudio.Metadata.Mutable" Version="0.9.4" />
+    <PackageReference Include="LeXtudio.Metadata.Mutable" Version="0.9.5" />
   </ItemGroup>
   <ItemGroup Condition="'$(UseNuGetPackage)' != 'true'">
     <!-- For local development, reference the project directly -->

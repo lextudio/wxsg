@@ -15,3 +15,13 @@ Useful success signals include:
 - `CurrentDocument.OutlineRoot` is not null.
 - `Outline[0].OutlineTreeView.Items.Count` is greater than zero.
 
+The inspector also captures runtime XAML internals to help diagnose WXSG/runtime mismatches:
+
+- Application and window `ResourceDictionary` trees (including merged dictionaries and sample keys).
+- Binding diagnostics (`PresentationTraceSources`) for warnings/errors.
+- Per-element local dependency property value sources (`DependencyPropertyHelper.GetValueSource`) and active binding expressions.
+- NameScope content (when the underlying implementation exposes its map).
+- Visual tree snapshot for quick structure validation.
+
+If theme/resource behavior is suspicious, compare the `ResourceProbe` section between controls that render correctly and controls that do not.
+

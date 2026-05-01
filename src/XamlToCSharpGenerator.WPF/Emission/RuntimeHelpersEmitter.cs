@@ -10,8 +10,10 @@ internal static class RuntimeHelpersEmitter
         EmitDependencyPropertyHelper(emitter);
         EmitRoutedEventHelper(emitter);
         EmitStaticResourceHelper(emitter);
+        EmitResourceLookupHelper(emitter);
         EmitXStaticHelper(emitter, docClassFullName);
         EmitWpfDoubleParserHelper(emitter);
+        EmitDynamicResourceReferenceHelper(emitter);
         EmitSetterValueHelper(emitter);
         EmitUnknownMarkupExtensionHelper(emitter);
         EmitTrySetBindingHelper(emitter);
@@ -73,6 +75,102 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "    }");
         sb.AppendLine(i + "");
         sb.AppendLine(i + "    return (double)global::System.ComponentModel.TypeDescriptor.GetConverter(typeof(double)).ConvertFromInvariantString(__raw);");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+    }
+
+    private static void EmitDynamicResourceReferenceHelper(GraphEmitter emitter)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        sb.AppendLine(i + "private static bool __WXSG_TrySetDynamicResourceReference(object __target, string __propertyName, string __ownerTypeName, object __resourceKey)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (__target is null || string.IsNullOrWhiteSpace(__propertyName) || __resourceKey is null)");
+        sb.AppendLine(i + "        return false;");
+        sb.AppendLine(i + "    global::System.Windows.DependencyProperty __dp = null;");
+        sb.AppendLine(i + "    var __flags = global::System.Reflection.BindingFlags.Public |");
+        sb.AppendLine(i + "        global::System.Reflection.BindingFlags.Static |");
+        sb.AppendLine(i + "        global::System.Reflection.BindingFlags.FlattenHierarchy;");
+        sb.AppendLine(i + "    if (!string.IsNullOrWhiteSpace(__ownerTypeName))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __ownerType = __WXSG_ResolveTypeToken(__ownerTypeName);");
+        sb.AppendLine(i + "        __dp = __ownerType?.GetField(__propertyName + \"Property\", __flags)?.GetValue(null) as global::System.Windows.DependencyProperty;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    if (__dp is null && __target is global::System.Windows.DependencyObject __depObj)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        for (var __t = __depObj.GetType(); __t is not null; __t = __t.BaseType)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __dp = __t.GetField(__propertyName + \"Property\", __flags)?.GetValue(null) as global::System.Windows.DependencyProperty;");
+        sb.AppendLine(i + "            if (__dp is not null)");
+        sb.AppendLine(i + "                break;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    if (__dp is null)");
+        sb.AppendLine(i + "        return false;");
+        sb.AppendLine(i + "    if (__target is global::System.Windows.FrameworkElement __fe)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __fe.SetResourceReference(__dp, __resourceKey);");
+        sb.AppendLine(i + "        return true;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    if (__target is global::System.Windows.FrameworkContentElement __fce)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __fce.SetResourceReference(__dp, __resourceKey);");
+        sb.AppendLine(i + "        return true;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    return false;");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
+    }
+
+    private static void EmitResourceLookupHelper(GraphEmitter emitter)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        sb.AppendLine(i + "private static object __WXSG_FindResourceInScope(object __scope, object __key)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    if (__key is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        return null;");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    object __resource = null;");
+        sb.AppendLine(i + "    if (__scope is global::System.Windows.FrameworkElement __frameworkElement)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __resource = __frameworkElement.TryFindResource(__key);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__scope is global::System.Windows.FrameworkContentElement __contentElement)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __resource = __contentElement.TryFindResource(__key);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "    else if (__scope is global::System.Windows.ResourceDictionary __resourceDictionary)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        try");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __resource = __resourceDictionary[__key];");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "        catch");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __resource = null;");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    if (__resource is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        var __rootScope = __WXSG_CurrentRootResourceScope;");
+        sb.AppendLine(i + "        if (!global::System.Object.ReferenceEquals(__rootScope, __scope) && __rootScope is not null)");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            __resource = __WXSG_FindResourceInScope(__rootScope, __key);");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    if (__resource is null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        __resource = global::System.Windows.Application.Current?.TryFindResource(__key);");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    return __resource;");
         sb.AppendLine(i + "}");
         sb.AppendLine();
     }
@@ -341,38 +439,7 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "        }");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i);
-        sb.AppendLine(i + "    object __resource = null;");
-        sb.AppendLine(i + "    if (__scope is global::System.Windows.FrameworkElement __frameworkElement)");
-        sb.AppendLine(i + "    {");
-        sb.AppendLine(i + "        __resource = __frameworkElement.TryFindResource(__key);");
-        sb.AppendLine(i + "    }");
-        sb.AppendLine(i + "    else if (__scope is global::System.Windows.FrameworkContentElement __contentElement)");
-        sb.AppendLine(i + "    {");
-        sb.AppendLine(i + "        __resource = __contentElement.TryFindResource(__key);");
-        sb.AppendLine(i + "    }");
-        sb.AppendLine(i);
-        sb.AppendLine(i + "    if (__resource is null)");
-        sb.AppendLine(i + "    {");
-        sb.AppendLine(i + "        var __rootScope = __WXSG_CurrentRootResourceScope;");
-        sb.AppendLine(i + "        var __sameAsScope = global::System.Object.ReferenceEquals(__rootScope, __scope);");
-        sb.AppendLine(i + "        if (!__sameAsScope && __rootScope is global::System.Windows.FrameworkElement)");
-        sb.AppendLine(i + "        {");
-        sb.AppendLine(i + "            var __rootFrameworkElement = (global::System.Windows.FrameworkElement)__rootScope;");
-        sb.AppendLine(i + "            __resource = __rootFrameworkElement.TryFindResource(__key);");
-        sb.AppendLine(i + "        }");
-        sb.AppendLine(i + "        else if (!__sameAsScope && __rootScope is global::System.Windows.FrameworkContentElement)");
-        sb.AppendLine(i + "        {");
-        sb.AppendLine(i + "            var __rootContentElement = (global::System.Windows.FrameworkContentElement)__rootScope;");
-        sb.AppendLine(i + "            __resource = __rootContentElement.TryFindResource(__key);");
-        sb.AppendLine(i + "        }");
-        sb.AppendLine(i + "    }");
-        sb.AppendLine(i);
-        sb.AppendLine(i + "    if (__resource is null)");
-        sb.AppendLine(i + "    {");
-        sb.AppendLine(i + "        var __app = global::System.Windows.Application.Current;");
-        sb.AppendLine(i + "        __resource = __app?.TryFindResource(__key);");
-        sb.AppendLine(i + "    }");
-        sb.AppendLine(i + "    return __resource;");
+        sb.AppendLine(i + "    return __WXSG_FindResourceInScope(__scope, __key);");
         sb.AppendLine(i + "}");
         sb.AppendLine();
     }
