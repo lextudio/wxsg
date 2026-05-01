@@ -231,6 +231,7 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 
         Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
         Assert.Contains("__altMemberName = __memberName + \"Key\"", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("foreach (var __candidate in __types2)", generatedCode, StringComparison.Ordinal);
 
         var repositoryRoot = GetWxsgRepositoryRoot();
         var rawDeferredXaml = Path.Combine(
