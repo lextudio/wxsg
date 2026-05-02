@@ -60,7 +60,6 @@ internal sealed class GraphEmitter
         EmitPropertyElementAssignments(node, nextAmbientStyleTargetTypeExpression, instanceVariable, nextSuppressNamedFieldRegistration);
         EmitEventSubscriptions(node, instanceVariable);
         EmitChildNodes(node, instanceVariable, nextAmbientStyleTargetTypeExpression, nextSuppressNamedFieldRegistration);
-
     }
 
     private void EmitNamedFieldAssignment(ResolvedObjectNode node, string instanceVariable, bool suppressNamedFieldRegistration)
@@ -334,6 +333,7 @@ internal sealed class GraphEmitter
                 var umeIdx = _localCounter++;
                 var umeValVar = "__meVal_" + umeIdx.ToString(CultureInfo.InvariantCulture);
                 var umeBindVar = "__meBinding_" + umeIdx.ToString(CultureInfo.InvariantCulture);
+                var umeBindVarExpr = "__meBindingExpr_" + umeIdx.ToString(CultureInfo.InvariantCulture);
                 var umeTargetType = string.IsNullOrWhiteSpace(assignment.ClrPropertyTypeName)
                     ? "object"
                     : assignment.ClrPropertyTypeName;
@@ -357,6 +357,10 @@ internal sealed class GraphEmitter
                     " is global::System.Windows.Data.BindingBase " + umeBindVar + ")");
                 Builder.AppendLine(MemberIndent + "            __WXSG_TrySetBinding(" +
                     instanceVariable + ", \"" + umePropNameEscaped + "\", " + umeBindVar + ");");
+                Builder.AppendLine(MemberIndent + "        else if (" + umeValVar +
+                    " is global::System.Windows.Data.BindingExpressionBase " + umeBindVarExpr + ")");
+                Builder.AppendLine(MemberIndent + "            __WXSG_TrySetBinding(" +
+                    instanceVariable + ", \"" + umePropNameEscaped + "\", " + umeBindVarExpr + ".ParentBindingBase);");
                 Builder.AppendLine(MemberIndent + "        else if (" + umeValVar + " is not null)");
                 if (!string.IsNullOrWhiteSpace(umeFrameworkOwnerForMe))
                 {
