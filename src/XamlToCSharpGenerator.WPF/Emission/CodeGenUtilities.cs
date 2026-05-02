@@ -633,11 +633,41 @@ internal static class CodeGenUtilities
             return ConvertLiteralExpression(valueExpression, innerType);
         }
 
-        // ImageSource with a relative pack URI like "/Assembly;component/Path" or
-        // "Assembly;component/Path": ConvertFromInvariantString cannot resolve these
-        // without a base URI context.  Emit a BitmapImage with an absolute pack URI.
+        // ImageSource: handle common resource URI forms that ConvertFromInvariantString
+        // cannot resolve without a base URI context.  Prefer emitting an absolute
+        // pack URI (pack://application:,,,/Assembly;component/Path) constructed at
+        // runtime using the owning object's assembly when possible.
         if (normalizedType is "System.Windows.Media.ImageSource" or "Windows.Media.ImageSource" or "ImageSource")
         {
+            // Unquote the original token to inspect the raw path.
+            var __unq = XamlQuotedValueSemantics.TrimAndUnquote(valueExpression);
+
+            // If the token looks like a relative project/resource path (contains
+            // slashes but no scheme or component token), emit a BitmapImage using
+            // a pack:// URI built from the runtime assembly name of the scope.
+            if (!string.IsNullOrWhiteSpace(__unq) &&
+                (__unq.Contains('/') || __unq.Contains('\\')) &&
+                __unq.IndexOf(':') < 0 &&
+                __unq.IndexOf(";component/", StringComparison.OrdinalIgnoreCase) < 0 &&
+                !__unq.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
+            {
+                var normalizedPath = __unq.Replace('\\', '/').TrimStart('/');
+                if (!string.IsNullOrWhiteSpace(scopeExpression))
+                {
+                    // Build pack URI at runtime using the instance's assembly name.
+                    return "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(" +
+                           "string.Concat(\"pack://application:,,,/\", " + scopeExpression + ".GetType().Assembly.GetName().Name, \";component/\", " +
+                           EscapeStringLiteral(normalizedPath) + "), global::System.UriKind.Absolute))";
+                }
+                else
+                {
+                    var absUri = "pack://application:,,," + (literalValue.StartsWith("/", StringComparison.Ordinal) ? literalValue : "/" + literalValue);
+                    return "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(" + EscapeStringLiteral(absUri) + ", global::System.UriKind.Absolute))";
+                }
+            }
+
+            // Existing behavior: if the literal already contains an Assembly;component
+            // token, convert to an absolute pack URI directly.
             var uriCandidate = literalValue.TrimStart('/');
             if (uriCandidate.IndexOf(";component/", StringComparison.OrdinalIgnoreCase) >= 0)
             {

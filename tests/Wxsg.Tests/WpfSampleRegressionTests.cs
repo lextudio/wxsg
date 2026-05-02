@@ -555,6 +555,29 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
+    public void WpfEmitter_Converts_Relative_ImageSource_To_Runtime_PackUri()
+    {
+        var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
+        var utilitiesType = generatorAssembly.GetType(
+            "XamlToCSharpGenerator.WPF.Emission.CodeGenUtilities",
+            throwOnError: true);
+
+        var method = utilitiesType!.GetMethod(
+            "ConvertLiteralExpression",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var converted = method!.Invoke(
+            null,
+            new object[] { "\"../Resources/balken_links.gif\"", "System.Windows.Media.ImageSource", "this" }) as string;
+
+        Assert.Equal(
+            "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(string.Concat(\"pack://application:,,,/\", this.GetType().Assembly.GetName().Name, \";component/\", \"../Resources/balken_links.gif\"), global::System.UriKind.Absolute))",
+            converted);
+    }
+
+    [Fact]
     public void WpfEmitter_Resolves_StaticResource_In_Binding_Source_Arguments()
     {
         var generatorAssembly = BuildAndLoadWpfEmitterAssembly();
