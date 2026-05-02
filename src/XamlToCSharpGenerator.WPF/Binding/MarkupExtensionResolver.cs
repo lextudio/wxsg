@@ -119,7 +119,14 @@ internal static class MarkupExtensionResolver
             return false;
         }
 
-        var resolvedType = TypeResolver.ResolveTypeToken(typeToken, context);
+        ITypeSymbol? resolvedType = null;
+        if (XamlTokenSplitSemantics.TrySplitAtFirstSeparator(typeToken, ':', out var prefix, out var xmlTypeName) &&
+            context.Document.XmlNamespaces.TryGetValue(prefix, out var prefixXmlNamespace))
+        {
+            resolvedType = TypeResolver.ResolveTypeSymbol(prefixXmlNamespace, xmlTypeName, ImmutableArray<string>.Empty, context);
+        }
+
+        resolvedType ??= TypeResolver.ResolveTypeToken(typeToken, context);
         if (resolvedType is null)
         {
             return false;
@@ -542,18 +549,156 @@ internal static class MarkupExtensionResolver
         var result = rawValue;
         foreach (var kvp in bindingInfo.NamedArguments)
         {
-            var argRaw = kvp.Value.Trim();
+            var argRaw = TryExtractRawBindingNamedArgumentMarkup(rawValue, kvp.Key) ?? kvp.Value.Trim();
             if (!MarkupParser.TryParseMarkupExtension(argRaw, out var nestedInfo))
                 continue;
-            if (XamlMarkupExtensionNameSemantics.Classify(nestedInfo.Name) != XamlMarkupExtensionKind.Unknown)
-                continue;
-            if (!TryBuildUnknownMarkupExtensionEncoding(nestedInfo, context, out var encoding))
-                continue;
-            // Replace the raw nested markup extension with the UME-encoded quoted string.
-            // The encoding is already a quoted string literal from AsStringLiteral.
-            result = result.Replace(argRaw, encoding);
+
+            switch (XamlMarkupExtensionNameSemantics.Classify(nestedInfo.Name))
+            {
+                case XamlMarkupExtensionKind.Type:
+                    if (TryNormalizeBindingTypeMarkupExtension(argRaw, nestedInfo, context, out var normalizedTypeMarkup))
+                    {
+                        result = result.Replace(argRaw, normalizedTypeMarkup);
+                    }
+
+                    break;
+                case XamlMarkupExtensionKind.Unknown:
+                    if (TryBuildUnknownMarkupExtensionEncoding(nestedInfo, context, out var encoding))
+                    {
+                        // Replace the raw nested markup extension with the UME-encoded quoted string.
+                        // The encoding is already a quoted string literal from AsStringLiteral.
+                        result = result.Replace(argRaw, encoding);
+                    }
+
+                    break;
+            }
         }
         return result;
+    }
+
+    private static string? TryExtractRawBindingNamedArgumentMarkup(string rawBindingValue, string argumentName)
+    {
+        var searchToken = argumentName + "=";
+        var searchIndex = 0;
+
+        while (searchIndex < rawBindingValue.Length)
+        {
+            var argumentIndex = rawBindingValue.IndexOf(searchToken, searchIndex, StringComparison.Ordinal);
+            if (argumentIndex < 0)
+            {
+                return null;
+            }
+
+            var valueStart = argumentIndex + searchToken.Length;
+            while (valueStart < rawBindingValue.Length && char.IsWhiteSpace(rawBindingValue[valueStart]))
+            {
+                valueStart++;
+            }
+
+            if (valueStart >= rawBindingValue.Length || rawBindingValue[valueStart] != '{')
+            {
+                searchIndex = valueStart;
+                continue;
+            }
+
+            var depth = 0;
+            for (var i = valueStart; i < rawBindingValue.Length; i++)
+            {
+                if (rawBindingValue[i] == '{')
+                {
+                    depth++;
+                }
+                else if (rawBindingValue[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return rawBindingValue.Substring(valueStart, i - valueStart + 1);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        return null;
+    }
+
+    private static bool TryNormalizeBindingTypeMarkupExtension(
+        string rawMarkup,
+        MarkupExtensionInfo markupInfo,
+        BindingContext context,
+        out string normalizedMarkup)
+    {
+        normalizedMarkup = string.Empty;
+
+        string? rawTypeToken = TryExtractRawTypeMarkupToken(rawMarkup);
+        if (markupInfo.NamedArguments.TryGetValue("Type", out var namedTypeToken) ||
+            markupInfo.NamedArguments.TryGetValue("TypeName", out namedTypeToken))
+        {
+            rawTypeToken ??= namedTypeToken;
+        }
+        else if (markupInfo.PositionalArguments.Length > 0)
+        {
+            rawTypeToken ??= markupInfo.PositionalArguments[0];
+        }
+
+        if (string.IsNullOrWhiteSpace(rawTypeToken))
+        {
+            return false;
+        }
+
+        var typeToken = XamlQuotedValueSemantics.TrimAndUnquote(rawTypeToken).Trim();
+        if (typeToken.Length == 0)
+        {
+            return false;
+        }
+
+        var resolvedType = TypeResolver.ResolveTypeToken(typeToken, context);
+        if (resolvedType is null)
+        {
+            return false;
+        }
+
+        var displayName = resolvedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", string.Empty);
+        normalizedMarkup = "{x:Type " + displayName + "}";
+        return true;
+    }
+
+    private static string? TryExtractRawTypeMarkupToken(string rawMarkup)
+    {
+        var trimmed = rawMarkup.Trim();
+        if (trimmed.Length < 2 || trimmed[0] != '{' || trimmed[trimmed.Length - 1] != '}')
+        {
+            return null;
+        }
+
+        var inner = trimmed.Substring(1, trimmed.Length - 2).Trim();
+        if (!inner.StartsWith("x:Type", StringComparison.Ordinal) &&
+            !inner.StartsWith("Type", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var separatorIndex = inner.IndexOf(' ');
+        if (separatorIndex < 0 || separatorIndex == inner.Length - 1)
+        {
+            return null;
+        }
+
+        var token = inner.Substring(separatorIndex + 1).Trim();
+        if (token.StartsWith("Type=", StringComparison.Ordinal) ||
+            token.StartsWith("TypeName=", StringComparison.Ordinal))
+        {
+            var equalsIndex = token.IndexOf('=');
+            if (equalsIndex >= 0 && equalsIndex < token.Length - 1)
+            {
+                token = token.Substring(equalsIndex + 1).Trim();
+            }
+        }
+
+        return token.Length == 0 ? null : token;
     }
 
     internal static string AsStringLiteral(string value)

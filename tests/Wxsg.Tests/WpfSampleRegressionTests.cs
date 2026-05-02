@@ -113,6 +113,44 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
+    public void CompositeCollection_ItemsSource_Sample_Builds_And_Assigns_ItemsSource()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/compositecollection-itemsource/CompositeCollectionItemsSourceSample.csproj",
+            "wpf-sample-compositecollection-itemsource");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("global::System.Windows.Data.CompositeCollection", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".ItemsSource.Add(", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("IEnumerable.Add(", generatedCode, StringComparison.Ordinal);
+        Assert.Contains(".ItemsSource = ", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Geometry_TextNode_Sample_Builds_And_Uses_TypeConverter()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/geometry-textnode/GeometryTextNodeSample.csproj",
+            "wpf-sample-geometry-textnode");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("typeof(global::System.Windows.Media.Geometry)", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("new global::System.Windows.Media.Geometry()", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MultiBinding_DependencyProperty_Sample_Builds_And_Uses_DependencyProperty_Binding()
     {
         if (!OperatingSystem.IsWindows())
@@ -240,7 +278,6 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         Assert.Contains("__WXSG_ResolveXStatic(", generatedCode, StringComparison.Ordinal);
         Assert.Contains("__altMemberName = __memberName + \"Key\"", generatedCode, StringComparison.Ordinal);
         Assert.Contains("foreach (var __candidate in __types2)", generatedCode, StringComparison.Ordinal);
-
         var repositoryRoot = GetWxsgRepositoryRoot();
         var rawDeferredXaml = Path.Combine(
             repositoryRoot,
@@ -260,6 +297,66 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         Assert.Contains("xmlns:wxsg_asm", content, StringComparison.Ordinal);
         Assert.Contains("{x:Static wxsg_asm0:ResourceKeys.TextBackgroundBrush}", content, StringComparison.Ordinal);
         Assert.DoesNotContain("{x:Static clr-namespace:ThemeXStaticRepro.Themes;assembly=ThemeXStaticRepro:", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AncestorType_NamespaceCollision_Sample_Builds_And_Uses_Full_Type_Name()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/ancestor-type-namespacecollision/AncestorTypeNamespaceCollisionSample.csproj",
+            "wpf-sample-ancestor-type-namespacecollision");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains(
+            "__WXSG_ResolveTypeToken(\"local:Mapping\")",
+            generatedCode,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "typeof(global::System.Xml.Serialization.Mapping)",
+            generatedCode,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InlineTextContent_Sample_Builds_And_Adds_Run_Children_To_Inlines()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/inline-textcontent/InlineTextContentSample.csproj",
+            "wpf-sample-inline-textcontent");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains(".Inlines.Add(__node", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Inlines =", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ContentHiddenReadonly_Sample_Builds_And_Uses_SetValue_For_Content_Attach()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/content-hidden-readonly/ContentHiddenReadonlySample.csproj",
+            "wpf-sample-content-hidden-readonly");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains(".SetValue(", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Content =", generatedCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -587,6 +684,26 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         Assert.DoesNotContain(
             "{x:Static clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase;assembly=WpfTmpStubIssue:",
             content,
+            StringComparison.Ordinal);
+
+        var looseDictionary = Path.Combine(
+            repositoryRoot,
+            "samples",
+            "wpftmp-stub-issue",
+            "obj",
+            "Debug",
+            framework,
+            "wxsg",
+            "raw-deferred",
+            "LooseDictionaries",
+            "UnusedLocalXmlns.xaml");
+
+        Assert.True(File.Exists(looseDictionary), $"Expected raw deferred XAML at '{looseDictionary}'.");
+
+        var looseContent = File.ReadAllText(looseDictionary);
+        Assert.Contains(
+            "xmlns:local=\"clr-namespace:WpfTmpStubIssue.Scenario1_MissingBase\"",
+            looseContent,
             StringComparison.Ordinal);
     }
 

@@ -133,7 +133,7 @@
 
   <Target Name="_WxsgPrepareXamlCSharp"
           BeforeTargets="MarkupCompilePass1;GenerateMSBuildEditorConfigFileShouldRun"
-          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+      Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true'">
 
     <Message Importance="High"
              Text="[WXSG_DEBUG] _WxsgPrepareXamlCSharp: project=$(MSBuildProjectName) tfm=$(TargetFramework) lang=$(Language) ext=$(MSBuildProjectExtension) CSharpMode=$(WpfXsgCSharpMode)"
@@ -171,9 +171,9 @@
 
         CLASSED XAML files: WXSG replaces InitializeComponent() codegen for these. They are moved
         out of Page so MarkupCompilePass1 does not produce conflicting .g.cs files alongside
-        WXSG's source-generated output, and so the _wpftmp intermediate project does not see
-        code-behind files referencing partial classes whose InitializeComponent is generated
-        only in the main compilation by WXSG.
+        WXSG's source-generated output. This must run in both the main project and any
+        _wpftmp temporary project so WXSG-generated partial classes remain available anywhere
+        WPF compiles code-behind.
 
         CLASSLESS XAML files (theme dictionaries such as Themes/generic.xaml): These have no
         x:Class and no code-behind, so the _wpftmp issue does not apply. We KEEP them in Page
@@ -230,32 +230,20 @@
       <Resource Include="@(_WxsgClassedPage)" KeepDuplicates="false" />
 
       <!--
-        BAML bypass: classless pages that reference local types cannot be processed by
-        MarkupCompilePass1 without _wpftmp, and _wpftmp fails with WXSG because WXSG
-        source generator output is absent in that compilation.
+        BAML bypass: in projects that contain any classed XAML, defer ALL classless pages
+        to post-CoreCompile BAML generation. WPF's Pass1-to-Pass2 deferral heuristics are
+        broader than a simple local-type text scan and can still route seemingly harmless
+        classless dictionaries into _wpftmp (for example SharpDevelop's ColumnPicker.xaml).
 
-        Detection heuristic: a classless page has local type refs if it contains
-        clr-namespace: without ;assembly= — this covers both {x:Type usage and direct
-        XML element usage of local types (e.g. xmlns:v="clr-namespace:Foo" followed by
-        <v:SomeLocalType/>).  A clr-namespace: with ;assembly= refers to an external
-        assembly and does not trigger _wpftmp, so such files are not deferred.
+        Once _wpftmp is invoked, the temporary compilation contains user code-behind but not
+        the WXSG-generated partial classes for classed XAML, leading to missing
+        InitializeComponent, named fields, and classed ResourceDictionary types.
 
-        We remove these from @(Page) so MarkupCompilePass1 never defers them, preventing
-        _wpftmp from being invoked.  _WxsgBamlBypass runs post-CoreCompile to generate
-        their BAML using the real compiled assembly for type resolution.
-      -->
-      <!--
-        Defer only when this project ALSO has classed pages.  For pure resource-dictionary
-        projects (no x:Class pages), _wpftmp works fine because WXSG generates no partial
-        classes that would be absent in the temp compilation.  Deferring unnecessarily in
-        those projects means _WxsgBamlBypass generates BAML but cannot embed it (chicken-
-        and-egg: the assembly is already sealed by CoreCompile).
+        For pure resource-dictionary projects (no x:Class pages), _wpftmp does not create
+        that mismatch, so classless pages stay on @(Page).
       -->
       <_WxsgDeferredClasslessPage Include="@(_WxsgClasslessPage)"
-        Condition="'$(_WxsgHasClassedPages)' == 'true' and
-                   '%(FullPath)' != '' and
-                   $([System.IO.File]::Exists('%(FullPath)')) and
-                   $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(FullPath)')), 'clr-namespace:(?![^;]*;assembly=)'))" />
+        Condition="'$(_WxsgHasClassedPages)' == 'true' and '%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)'))" />
 
       <Page Remove="@(_WxsgDeferredClasslessPage)" />
       <None Include="@(_WxsgDeferredClasslessPage)" />
@@ -288,7 +276,7 @@
 
   <Target Name="_WxsgPrepareXamlVisualBasic"
           BeforeTargets="GenerateMSBuildEditorConfigFileShouldRun"
-          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgVisualBasicMode)' == 'true' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+      Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgVisualBasicMode)' == 'true'">
     <ItemGroup>
       <AdditionalFiles Include="@(Page)">
         <SourceItemGroup>Page</SourceItemGroup>

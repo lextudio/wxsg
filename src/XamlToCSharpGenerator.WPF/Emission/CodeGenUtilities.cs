@@ -407,10 +407,16 @@ internal static class CodeGenUtilities
             if (!string.IsNullOrWhiteSpace(typeToken))
             {
                 var __plainTypeToken = XamlQuotedValueSemantics.TrimAndUnquote(typeToken).Trim();
-                var __resolvedRt = ResolveRuntimeType(__plainTypeToken.Contains(':') ? __plainTypeToken.Substring(__plainTypeToken.IndexOf(':') + 1) : __plainTypeToken);
-                if (__resolvedRt is not null)
+                var __directTypeToken = __plainTypeToken.Contains(':')
+                    ? __plainTypeToken.Substring(__plainTypeToken.IndexOf(':') + 1)
+                    : __plainTypeToken;
+                if (__directTypeToken.Contains('.'))
                 {
-                    return "typeof(" + QualifyType(__resolvedRt.FullName) + ")";
+                    var __resolvedRt = ResolveRuntimeType(__directTypeToken);
+                    if (__resolvedRt is not null)
+                    {
+                        return "typeof(" + QualifyType(__resolvedRt.FullName) + ")";
+                    }
                 }
 
                 return "__WXSG_ResolveTypeToken(" + EscapeStringLiteral(__plainTypeToken) + ")";

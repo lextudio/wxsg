@@ -1,0 +1,13 @@
+<Window x:Class="InlineTextContentSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Inline Text Content"
+        Width="320"
+        Height="180">
+  <StackPanel Margin="16">
+    <TextBlock x:Name="PlainTextBlock">Plain inline text</TextBlock>
+    <TextBlock Margin="0,8,0,0">
+      <Span>Nested span inline text</Span>
+    </TextBlock>
+  </StackPanel>
+</Window>

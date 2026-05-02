@@ -6,7 +6,7 @@ internal static class RuntimeHelpersEmitter
 {
     public static void Emit(GraphEmitter emitter, string? docClassFullName)
     {
-        EmitTypeTokenHelper(emitter);
+        EmitTypeTokenHelper(emitter, docClassFullName);
         EmitDependencyPropertyHelper(emitter);
         EmitRoutedEventHelper(emitter);
         EmitStaticResourceHelper(emitter);
@@ -175,7 +175,7 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine();
     }
 
-    private static void EmitTypeTokenHelper(GraphEmitter emitter)
+    private static void EmitTypeTokenHelper(GraphEmitter emitter, string? docClassFullName)
     {
         var sb = emitter.Builder;
         var i = emitter.MemberIndent;
@@ -201,6 +201,32 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "        return __direct;");
         sb.AppendLine(i + "    }");
         sb.AppendLine(i);
+        if (!string.IsNullOrWhiteSpace(docClassFullName))
+        {
+            sb.AppendLine(i + "    var __callingType = typeof(" + CodeGenUtilities.QualifyType(docClassFullName) + ");");
+            sb.AppendLine(i + "    var __callingAsm = __callingType.Assembly;");
+            sb.AppendLine(i + "    var __callingNs = __callingType.Namespace;");
+            sb.AppendLine(i + "    if (__trimmed.IndexOf('.') < 0)");
+            sb.AppendLine(i + "    {");
+            sb.AppendLine(i + "        if (!string.IsNullOrWhiteSpace(__callingNs))");
+            sb.AppendLine(i + "        {");
+            sb.AppendLine(i + "            var __sameNamespace = __callingAsm.GetType(__callingNs + \".\" + __trimmed, throwOnError: false);");
+            sb.AppendLine(i + "            if (__sameNamespace is not null)");
+            sb.AppendLine(i + "            {");
+            sb.AppendLine(i + "                return __sameNamespace;");
+            sb.AppendLine(i + "            }");
+            sb.AppendLine(i + "        }");
+            sb.AppendLine(i);
+            sb.AppendLine(i + "        foreach (var __candidate in __callingAsm.GetTypes())");
+            sb.AppendLine(i + "        {");
+            sb.AppendLine(i + "            if (__candidate is not null && string.Equals(__candidate.Name, __trimmed, global::System.StringComparison.Ordinal))");
+            sb.AppendLine(i + "            {");
+            sb.AppendLine(i + "                return __candidate;");
+            sb.AppendLine(i + "            }");
+            sb.AppendLine(i + "        }");
+            sb.AppendLine(i + "    }");
+            sb.AppendLine(i);
+        }
         sb.AppendLine(i + "    var __knownNamespaces = new[]");
         sb.AppendLine(i + "    {");
         sb.AppendLine(i + "        \"System.Windows\",");

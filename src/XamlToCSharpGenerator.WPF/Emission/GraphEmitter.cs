@@ -644,7 +644,33 @@ internal sealed class GraphEmitter
             switch (rootNode.ChildAttachmentMode)
             {
                 case ResolvedChildAttachmentMode.Content:
-                    Builder.AppendLine(MemberIndent + "    " + contentPropertyAccess + " = null;");
+                    var cleanupDependencyPropertyExpression = TryBuildDependencyPropertyExpression(
+                        rootNode.TypeName,
+                        contentPropertyName,
+                        out var cleanupRequiresRuntimeLookup);
+                    if (!string.IsNullOrWhiteSpace(cleanupDependencyPropertyExpression))
+                    {
+                        if (cleanupRequiresRuntimeLookup)
+                        {
+                            var cleanupDpVarName = "__dp_" + _localCounter++;
+                            var cleanupPropVarName = "__prop_" + _localCounter++;
+                            Builder.AppendLine(MemberIndent + "    { var " + cleanupDpVarName + " = " + cleanupDependencyPropertyExpression + ";");
+                            Builder.AppendLine(MemberIndent + "    if (" + cleanupDpVarName + " != null) ((global::System.Windows.DependencyObject)this).SetValue(" + cleanupDpVarName + ", null);");
+                            Builder.AppendLine(MemberIndent + "    else { var " + cleanupPropVarName + " = this.GetType().GetProperty(\"" + contentPropertyName + "\", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+                            Builder.AppendLine(MemberIndent + "    if (" + cleanupPropVarName + " != null && " + cleanupPropVarName + ".CanWrite) " + cleanupPropVarName + ".SetValue(this, null); } }");
+                        }
+                        else
+                        {
+                            Builder.AppendLine(MemberIndent + "    ((global::System.Windows.DependencyObject)this).SetValue(" + cleanupDependencyPropertyExpression + ", null);");
+                        }
+                    }
+                    else
+                    {
+                        var cleanupPropVarName = "__prop_" + _localCounter++;
+                        Builder.AppendLine(MemberIndent + "    { var " + cleanupPropVarName + " = this.GetType().GetProperty(\"" + contentPropertyName + "\", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+                        Builder.AppendLine(MemberIndent + "    if (" + cleanupPropVarName + " != null && " + cleanupPropVarName + ".CanWrite) " + cleanupPropVarName + ".SetValue(this, null); }");
+                    }
+
                     emittedMemberAccesses.Add(contentPropertyAccess);
                     break;
                 case ResolvedChildAttachmentMode.ChildrenCollection:
@@ -801,6 +827,19 @@ internal sealed class GraphEmitter
                         bindingExpression + ");");
                 }
 
+                continue;
+            }
+
+            if (ShouldAssignPropertyElementDirectly(propertyElement))
+            {
+                Builder.AppendLine(
+                    MemberIndent + "    " +
+                    instanceVariable + "." + propertyElement.PropertyName + " = " +
+                    BuildChildValueExpression(
+                        propertyElement.ObjectValues[0],
+                        createdValues[0],
+                        propertyElement.ClrPropertyTypeName,
+                        instanceVariable) + ";");
                 continue;
             }
 
@@ -1023,6 +1062,31 @@ internal sealed class GraphEmitter
         switch (parent.ChildAttachmentMode)
         {
             case ResolvedChildAttachmentMode.Content:
+                var dependencyPropertyExpression = TryBuildDependencyPropertyExpression(
+                    parent.TypeName,
+                    contentProperty,
+                    out var requiresRuntimeLookup);
+                if (!string.IsNullOrWhiteSpace(dependencyPropertyExpression))
+                {
+                    if (requiresRuntimeLookup)
+                    {
+                        var dpVarName = "__dp_" + _localCounter++;
+                        var propVarName = "__prop_" + _localCounter++;
+                        Builder.AppendLine(MemberIndent + "    { var " + dpVarName + " = " + dependencyPropertyExpression + ";");
+                        Builder.AppendLine(MemberIndent + "    if (" + dpVarName + " != null) ((global::System.Windows.DependencyObject)" + parentVariable + ").SetValue(" + dpVarName + ", " + childVariable + ");");
+                        Builder.AppendLine(MemberIndent + "    else { var " + propVarName + " = " + parentVariable + ".GetType().GetProperty(\"" + contentProperty + "\", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.FlattenHierarchy);");
+                        Builder.AppendLine(MemberIndent + "    if (" + propVarName + " != null && " + propVarName + ".CanWrite) " + propVarName + ".SetValue(" + parentVariable + ", " + childVariable + "); } }");
+                    }
+                    else
+                    {
+                        Builder.AppendLine(
+                            MemberIndent + "    ((global::System.Windows.DependencyObject)" +
+                            parentVariable + ").SetValue(" + dependencyPropertyExpression + ", " + childVariable + ");");
+                    }
+
+                    return;
+                }
+
                 Builder.AppendLine(
                     MemberIndent + "    " +
                     parentVariable + "." + contentProperty + " = " + childVariable + ";");
@@ -1357,6 +1421,16 @@ internal sealed class GraphEmitter
         return "(" + CodeGenUtilities.QualifyType(targetTypeName) + ")__WXSG_EvaluateMarkupExtension(" + childVariable + ")";
     }
 
+    private static bool ShouldAssignPropertyElementDirectly(ResolvedPropertyElementAssignment propertyElement)
+    {
+        if (propertyElement.ObjectValues.Length != 1)
+        {
+            return false;
+        }
+
+        return propertyElement.PropertyName.Equals("ItemsSource", StringComparison.Ordinal);
+    }
+
     private static bool IsCollectionLikeTypeName(string? typeName)
     {
         if (string.IsNullOrWhiteSpace(typeName))
@@ -1367,7 +1441,6 @@ internal sealed class GraphEmitter
         var normalized = typeName.Replace("global::", string.Empty);
         return normalized.Contains("ICollection", StringComparison.Ordinal) ||
                normalized.Contains("IList", StringComparison.Ordinal) ||
-               normalized.Contains("IEnumerable", StringComparison.Ordinal) ||
                normalized.Contains("Collection", StringComparison.Ordinal) ||
                normalized.Contains("List", StringComparison.Ordinal);
     }

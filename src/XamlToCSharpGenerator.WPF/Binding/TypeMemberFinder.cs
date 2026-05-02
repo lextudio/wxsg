@@ -143,9 +143,7 @@ internal static class TypeMemberFinder
 
         if (type is INamedTypeSymbol namedType)
         {
-            if (ImplementsInterface(namedType, "System.Collections.IEnumerable") ||
-                ImplementsInterface(namedType, "System.Collections.Generic.IEnumerable`1") ||
-                ImplementsInterface(namedType, "System.Collections.IList") ||
+            if (ImplementsInterface(namedType, "System.Collections.IList") ||
                 ImplementsInterface(namedType, "System.Collections.Generic.ICollection`1"))
             {
                 return true;

@@ -1,0 +1,10 @@
+<local:ReadonlyContentControl x:Class="ContentHiddenReadonlySample.MainWindow"
+                              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                              xmlns:local="clr-namespace:ContentHiddenReadonlySample"
+                              Width="320"
+                              Height="180">
+  <Grid>
+    <TextBlock Text="Hidden content property sample" />
+  </Grid>
+</local:ReadonlyContentControl>

@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using XamlToCSharpGenerator.Core.Abstractions;
 using XamlToCSharpGenerator.Core.Models;
 using XamlToCSharpGenerator.Core.Parsing;
+using XamlToCSharpGenerator.WPF.Emission;
 
 namespace XamlToCSharpGenerator.WPF.Binding;
 
@@ -154,6 +155,53 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             contentPropertyType = nodeType;
         }
 
+        string? factoryExpression = null;
+        if (nodeType is not null &&
+            children.Count == 0 &&
+            !string.IsNullOrWhiteSpace(node.TextContent))
+        {
+            var inlineTextContent = (node.RawTextContent ?? node.TextContent)?.Trim();
+            if (!string.IsNullOrWhiteSpace(inlineTextContent))
+            {
+                var literalExpression = MarkupExtensionResolver.AsStringLiteral(inlineTextContent);
+                var handledAsContentProperty = false;
+
+                if (!string.IsNullOrWhiteSpace(contentPropertyName) &&
+                    contentPropertyType is not null &&
+                    !HasResolvedPropertyAssignment(assignments, contentPropertyName!) &&
+                    !HasResolvedPropertyElementAssignment(propertyElementAssignments, contentPropertyName!))
+                {
+                    if (ShouldTreatInlineTextAsInlineCollectionChild(contentPropertyName!, contentPropertyType))
+                    {
+                        children.Add(CreateInlineTextRunNode(inlineTextContent, node.Line, node.Column, node.Condition));
+                    }
+                    else
+                    {
+                        assignments.Add(new ResolvedPropertyAssignment(
+                            PropertyName: contentPropertyName!,
+                            ValueExpression: CodeGenUtilities.ConvertLiteralExpression(
+                                literalExpression,
+                                contentPropertyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)),
+                            ClrPropertyOwnerTypeName: nodeType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            ClrPropertyTypeName: contentPropertyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            Line: node.Line,
+                            Column: node.Column,
+                            Condition: node.Condition));
+                    }
+
+                    handledAsContentProperty = true;
+                }
+
+                if (!handledAsContentProperty &&
+                    assignments.Count == 0 &&
+                    propertyElementAssignments.Count == 0 &&
+                    eventSubscriptions.Count == 0)
+                {
+                    factoryExpression = CodeGenUtilities.ConvertLiteralExpression(literalExpression, typeName);
+                }
+            }
+        }
+
         var childAttachmentMode = TypeMemberFinder.ResolveChildAttachmentMode(children.Count, contentPropertyName, contentPropertyType);
 
         return new ResolvedObjectNode(
@@ -161,7 +209,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             Name: node.Name,
             TypeName: typeName,
             IsBindingObjectNode: false,
-            FactoryExpression: null,
+            FactoryExpression: factoryExpression,
             FactoryValueRequirements: ResolvedValueRequirements.None,
             UseServiceProviderConstructor: false,
             UseTopDownInitialization: false,
@@ -175,6 +223,79 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             Column: node.Column,
             Condition: node.Condition,
             ContentPropertyTypeName: contentPropertyType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+    }
+
+    private static bool ShouldTreatInlineTextAsInlineCollectionChild(string contentPropertyName, ITypeSymbol contentPropertyType)
+    {
+        if (!contentPropertyName.Equals("Inlines", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return TypeMemberFinder.IsCollectionLikeType(contentPropertyType) ||
+               contentPropertyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                   .Contains("InlineCollection", StringComparison.Ordinal);
+    }
+
+    private static ResolvedObjectNode CreateInlineTextRunNode(string inlineTextContent, int line, int column, ConditionalXamlExpression? condition)
+    {
+        return new ResolvedObjectNode(
+            KeyExpression: null,
+            Name: null,
+            TypeName: "global::System.Windows.Documents.Run",
+            IsBindingObjectNode: false,
+            FactoryExpression: null,
+            FactoryValueRequirements: ResolvedValueRequirements.None,
+            UseServiceProviderConstructor: false,
+            UseTopDownInitialization: false,
+            PropertyAssignments: ImmutableArray.Create(
+                new ResolvedPropertyAssignment(
+                    PropertyName: "Text",
+                    ValueExpression: MarkupExtensionResolver.AsStringLiteral(inlineTextContent),
+                    ClrPropertyOwnerTypeName: "global::System.Windows.Documents.Run",
+                    ClrPropertyTypeName: "global::System.String",
+                    Line: line,
+                    Column: column,
+                    Condition: condition)),
+            PropertyElementAssignments: ImmutableArray<ResolvedPropertyElementAssignment>.Empty,
+            EventSubscriptions: ImmutableArray<ResolvedEventSubscription>.Empty,
+            Children: ImmutableArray<ResolvedObjectNode>.Empty,
+            ChildAttachmentMode: ResolvedChildAttachmentMode.None,
+            ContentPropertyName: null,
+            Line: line,
+            Column: column,
+            Condition: condition,
+            ContentPropertyTypeName: null);
+    }
+
+    private static bool HasResolvedPropertyAssignment(
+        ImmutableArray<ResolvedPropertyAssignment>.Builder assignments,
+        string propertyName)
+    {
+        foreach (var assignment in assignments)
+        {
+            if (string.Equals(assignment.PropertyName, propertyName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasResolvedPropertyElementAssignment(
+        ImmutableArray<ResolvedPropertyElementAssignment>.Builder assignments,
+        string propertyName)
+    {
+        foreach (var assignment in assignments)
+        {
+            if (string.Equals(assignment.PropertyName, propertyName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ResolvedObjectNode BindXamlArrayNode(XamlObjectNode node, BindingContext context)
