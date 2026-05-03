@@ -491,6 +491,27 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
+    public void WindowWithCustomBase_Does_Not_Emit_DefaultStyleKey_Override()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/window-custom-base/WindowCustomBaseSample.csproj",
+            "wpf-sample-window-custom-base");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        // Window subclasses with a custom base (e.g. FullScreenEnabledWindow) must NOT get
+        // DefaultStyleKeyProperty.OverrideMetadata — that would point WPF to a type with no
+        // theme style, leaving Template null and the window black.
+        Assert.DoesNotContain("__WxsgOverrideDefaultStyleKey", generatedCode, StringComparison.Ordinal);
+        Assert.DoesNotContain("DefaultStyleKeyProperty.OverrideMetadata", generatedCode, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WpfEmitter_Treats_XNull_As_Clr_Null_For_BrushProperties()
     {
         var repositoryRoot = GetWxsgRepositoryRoot();

@@ -142,6 +142,53 @@ At **runtime**, the WXSG-generated `InitializeComponent()` code:
 
 This means your project-specific markup extensions **just work** — no extra configuration in WXSG, no handler registration, no MSBuild properties to set.
 
+## Examining WXSG-Generated Code
+
+When debugging unexpected runtime behaviour it is useful to see what C# code WXSG generates for your XAML files.
+
+### SDK-style projects (.NET 5 / 6 / 8 / 10 …)
+
+Set `WpfXsgEmitGeneratedFiles` in your project file:
+
+```xml
+<PropertyGroup>
+  <WpfXsgEmitGeneratedFiles>true</WpfXsgEmitGeneratedFiles>
+</PropertyGroup>
+```
+
+After a build, the generated `.g.cs` files appear in:
+
+```
+obj\<Configuration>\<TargetFramework>\generated\
+  XamlToCSharpGenerator.Generator.WPF\
+    XamlToCSharpGenerator.Generator.WPF.WpfXamlSourceGenerator\
+      WPF.<AssemblyName>_<FileName>.wpf.g.cs
+```
+
+For example, a project named `SimpleSample` with a `MainWindow.xaml` produces:
+
+```
+obj\Debug\net10.0-windows\generated\...\WPF.SimpleSample_MainWindow.wpf.g.cs
+```
+
+### Classic .NET Framework projects
+
+`WpfXsgEmitGeneratedFiles` maps to Roslyn's `EmitCompilerGeneratedFiles`, which is not
+fully supported by the old-style MSBuild/Roslyn pipeline for .NET Framework targets.
+The generated files are compiled directly into the assembly but may not be written to disk.
+
+To inspect the generated code for a .NET Framework project:
+
+1. **Enable `WpfXsgEmitGeneratedFiles`** anyway — some toolset versions do write files to
+   `obj\<Configuration>\generated\…` (same layout as above but without a `<TargetFramework>` segment).
+2. **Use a decompiler** (ILSpy, dnSpy, dotPeek) to open the compiled `.exe`/`.dll` and
+   inspect the `InitializeComponent` and `__WXSG_BuildObjectGraph` methods on the class
+   that owns the XAML.
+3. **Set `WXSG_DEBUG=1`** as an environment variable before launching the application.
+   WXSG-generated `InitializeComponent` writes a trace log to
+   `%TEMP%\wxsg_rt.log` when this variable is set, recording every class that enters
+   `BuildObjectGraph` and whether it completes.
+
 ## Notes
 
 - `xmlns:local="clr-namespace:YourNamespace"` is still needed when referencing your own CLR types

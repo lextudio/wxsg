@@ -76,8 +76,18 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         if (!IsApplicationDefinition(viewModel) && !string.IsNullOrWhiteSpace(rootTypeName) && !string.IsNullOrWhiteSpace(doc.ClassFullName))
         {
             var normalizedRoot = rootTypeName.Replace("global::", string.Empty);
+            var normalizedRootShort = normalizedRoot.Contains('.')
+                ? normalizedRoot.Substring(normalizedRoot.LastIndexOf('.') + 1)
+                : normalizedRoot;
+            // Skip DefaultStyleKey override for Window/Page subclasses — they rely on WPF's
+            // built-in theme styles and any custom base (e.g. FullScreenEnabledWindow) has no
+            // theme resource, leaving Template null and the window black.
+            var isWindowLike = normalizedRootShort.EndsWith("Window", StringComparison.OrdinalIgnoreCase)
+                || normalizedRootShort.Equals("Page", StringComparison.OrdinalIgnoreCase)
+                || normalizedRootShort.Equals("NavigationPage", StringComparison.OrdinalIgnoreCase);
             if (!normalizedRoot.StartsWith("System.", StringComparison.Ordinal) &&
                 !normalizedRoot.StartsWith("Microsoft.", StringComparison.Ordinal) &&
+                !isWindowLike &&
                 !string.Equals(normalizedRoot, doc.ClassFullName, StringComparison.Ordinal))
             {
                 sb.AppendLine();
