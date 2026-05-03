@@ -573,7 +573,7 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
             new object[] { "\"../Resources/balken_links.gif\"", "System.Windows.Media.ImageSource", "this" }) as string;
 
         Assert.Equal(
-            "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(string.Concat(\"pack://application:,,,/\", this.GetType().Assembly.GetName().Name, \";component/\", \"../Resources/balken_links.gif\"), global::System.UriKind.Absolute))",
+            "__WXSG_LoadImageSource(this, \"resources/balken_links.gif\")",
             converted);
     }
 

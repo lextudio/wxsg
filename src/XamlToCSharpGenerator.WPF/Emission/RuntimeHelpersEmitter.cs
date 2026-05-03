@@ -9,6 +9,7 @@ internal static class RuntimeHelpersEmitter
         EmitTypeTokenHelper(emitter, docClassFullName);
         EmitDependencyPropertyHelper(emitter);
         EmitRoutedEventHelper(emitter);
+        EmitImageSourceLoaderHelper(emitter);
         EmitStaticResourceHelper(emitter);
         EmitResourceLookupHelper(emitter);
         EmitXStaticHelper(emitter, docClassFullName);
@@ -19,6 +20,52 @@ internal static class RuntimeHelpersEmitter
         EmitTrySetBindingHelper(emitter);
         EmitElementReferenceResolverHelper(emitter);
         EmitWpfCommandResolver(emitter, docClassFullName);
+    }
+
+    private static void EmitImageSourceLoaderHelper(GraphEmitter emitter)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        sb.AppendLine(i + "private static global::System.Windows.Media.ImageSource __WXSG_LoadImageSource(object __scope, string __rawPath)");
+        sb.AppendLine(i + "{");
+        sb.AppendLine(i + "    var __path = (__rawPath ?? string.Empty).Trim().Replace('\\\\', '/').TrimStart('/');");
+        sb.AppendLine(i + "    while (__path.StartsWith(\"../\", global::System.StringComparison.Ordinal)) __path = __path.Substring(3);");
+        sb.AppendLine(i + "    while (__path.StartsWith(\"./\", global::System.StringComparison.Ordinal)) __path = __path.Substring(2);");
+        sb.AppendLine(i + "    __path = __path.ToLowerInvariant();");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    if (!string.IsNullOrWhiteSpace(__path) && __scope is not null)");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        try");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            var __asm = __scope.GetType().Assembly.GetName().Name;");
+        sb.AppendLine(i + "            if (!string.IsNullOrWhiteSpace(__asm))");
+        sb.AppendLine(i + "            {");
+        sb.AppendLine(i + "                var __asmUri = new global::System.Uri(string.Concat(\"pack://application:,,,/\", __asm, \";component/\", __path), global::System.UriKind.Absolute);");
+        sb.AppendLine(i + "                return new global::System.Windows.Media.Imaging.BitmapImage(__asmUri);");
+        sb.AppendLine(i + "            }");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "        catch { }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    if (!string.IsNullOrWhiteSpace(__path))");
+        sb.AppendLine(i + "    {");
+        sb.AppendLine(i + "        try");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(\"pack://application:,,,/\" + __path, global::System.UriKind.Absolute));");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "        catch { }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "        try");
+        sb.AppendLine(i + "        {");
+        sb.AppendLine(i + "            return new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(__path, global::System.UriKind.Relative));");
+        sb.AppendLine(i + "        }");
+        sb.AppendLine(i + "        catch { }");
+        sb.AppendLine(i + "    }");
+        sb.AppendLine(i + "");
+        sb.AppendLine(i + "    return (global::System.Windows.Media.ImageSource)global::System.ComponentModel.TypeDescriptor.GetConverter(typeof(global::System.Windows.Media.ImageSource)).ConvertFromInvariantString(__rawPath);");
+        sb.AppendLine(i + "}");
+        sb.AppendLine();
     }
 
     private static void EmitWpfDoubleParserHelper(GraphEmitter emitter)

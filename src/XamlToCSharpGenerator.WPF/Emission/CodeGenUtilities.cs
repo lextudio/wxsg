@@ -652,17 +652,30 @@ internal static class CodeGenUtilities
                 !__unq.StartsWith("pack://", StringComparison.OrdinalIgnoreCase))
             {
                 var normalizedPath = __unq.Replace('\\', '/').TrimStart('/');
+                // XAML image paths may be expressed relative to the .xaml file (for example
+                // "../Resources/foo.png"). WPF pack URIs address project resources from the
+                // assembly root; collapse leading relative navigation segments.
+                while (normalizedPath.StartsWith("../", StringComparison.Ordinal))
+                {
+                    normalizedPath = normalizedPath.Substring(3);
+                }
+
+                while (normalizedPath.StartsWith("./", StringComparison.Ordinal))
+                {
+                    normalizedPath = normalizedPath.Substring(2);
+                }
+
+                // WPF resource keys in .g.resources are normalized to lower-case paths
+                // (for example "resources/foo.png"). Keep generated pack URIs aligned.
+                normalizedPath = normalizedPath.ToLowerInvariant();
+
                 if (!string.IsNullOrWhiteSpace(scopeExpression))
                 {
-                    // Build pack URI at runtime using the instance's assembly name.
-                    return "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(" +
-                           "string.Concat(\"pack://application:,,,/\", " + scopeExpression + ".GetType().Assembly.GetName().Name, \";component/\", " +
-                           EscapeStringLiteral(normalizedPath) + "), global::System.UriKind.Absolute))";
+                    return "__WXSG_LoadImageSource(" + scopeExpression + ", " + EscapeStringLiteral(normalizedPath) + ")";
                 }
                 else
                 {
-                    var absUri = "pack://application:,,," + (literalValue.StartsWith("/", StringComparison.Ordinal) ? literalValue : "/" + literalValue);
-                    return "new global::System.Windows.Media.Imaging.BitmapImage(new global::System.Uri(" + EscapeStringLiteral(absUri) + ", global::System.UriKind.Absolute))";
+                    return "__WXSG_LoadImageSource(null, " + EscapeStringLiteral(normalizedPath) + ")";
                 }
             }
 
