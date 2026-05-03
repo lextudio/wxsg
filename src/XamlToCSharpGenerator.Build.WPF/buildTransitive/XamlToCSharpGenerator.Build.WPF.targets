@@ -250,13 +250,20 @@
     </ItemGroup>
 
     <!--
-      Generate normalized raw XAML copies for diagnostics and regression coverage.
-      Runtime loading should prefer the injected BAML entries from _WxsgBamlBypass;
-      embedding these raw copies under the same pack URI would shadow the BAML and
-      make WPF parse dictionaries that may contain internal same-assembly types.
-      WxsgStripXSharedFromXaml strips x:Shared, a BAML-only attribute rejected by
-      the raw XAML parser, and assembly-qualifies same-assembly x:Static member
-      tokens without changing the xmlns values used for element/type creation.
+      Generate normalized raw XAML copies of deferred classless pages.
+      WxsgStripXSharedFromXaml strips x:Shared (BAML-only, rejected by raw XAML parser)
+      and assembly-qualifies same-assembly x:Static member tokens, while leaving bare
+      clr-namespace: xmlns declarations intact so WPF can instantiate same-assembly types
+      when the resource is loaded via its component pack URI.
+
+      These stripped copies are embedded as Resource items (raw XAML) so that
+      __WxsgThemeLoader can load them at runtime via Application.GetResourceStream().
+      This is the reliable fallback when _WxsgBamlBypass BAML injection is skipped
+      (e.g. incremental builds where CoreCompile is up-to-date) or not yet run.
+
+      When _WxsgBamlBypass also succeeds, the injected BAML takes precedence: WPF's
+      pack URI resolver redirects .xaml requests to .baml when a compiled BAML entry
+      exists in the same .g.resources, so BAML is preferred and the raw copy is ignored.
     -->
     <WxsgStripXSharedFromXaml
         InputFiles="@(_WxsgDeferredClasslessPage)"
@@ -266,6 +273,15 @@
         Condition="'@(_WxsgDeferredClasslessPage)' != ''">
       <Output TaskParameter="StrippedFiles" ItemName="_WxsgEmbeddedDeferredClasslessPage" />
     </WxsgStripXSharedFromXaml>
+
+    <!--
+      Embed the stripped copies as Resource items so they are accessible via pack URIs
+      at runtime (Application.GetResourceStream / ResourceDictionary.Source).
+      KeepDuplicates=false prevents double-embedding on incremental rebuilds.
+    -->
+    <ItemGroup>
+      <Resource Include="@(_WxsgEmbeddedDeferredClasslessPage)" KeepDuplicates="false" />
+    </ItemGroup>
 
     <Message Importance="Low"
              Text="WXSG: deferring classless page to post-CoreCompile BAML: %(_WxsgDeferredClasslessPage.Identity)" />
