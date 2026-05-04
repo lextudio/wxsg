@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
+          Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props')" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!--
+      Regression test for abstract Geometry type used in a classless ResourceDictionary.
+
+      SharpDevelop's QueryView.xaml contained:
+        <Geometry x:Key="DownArrowGeometry">M 0 0 L 3.5 4 L 7 0 Z</Geometry>
+
+      The abstract Geometry type requires a TypeConverter to instantiate from a text node.
+      This works in a classed Window XAML (covered by geometry-textnode sample), but must
+      also work when Geometry appears in a classless ResourceDictionary that is processed
+      via the raw-deferred path (WxsgStripXSharedFromXaml + __WxsgThemeLoader).
+
+      This sample verifies both:
+        1. The build succeeds with Geometry in a classless ResourceDictionary.
+        2. WXSG emits typeof(Geometry) with a TypeConverter rather than new Geometry().
+    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <WpfXsgEnabled>true</WpfXsgEnabled>
+    <WpfXsgCSharpMode>true</WpfXsgCSharpMode>
+    <WpfXsgEmitGeneratedFiles>true</WpfXsgEmitGeneratedFiles>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\XamlToCSharpGenerator.Generator.WPF\XamlToCSharpGenerator.Generator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\XamlToCSharpGenerator.WPF\XamlToCSharpGenerator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Compiler\XamlToCSharpGenerator.Compiler.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Core\XamlToCSharpGenerator.Core.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.ExpressionSemantics\XamlToCSharpGenerator.ExpressionSemantics.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Framework.Abstractions\XamlToCSharpGenerator.Framework.Abstractions.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.MiniLanguageParsing\XamlToCSharpGenerator.MiniLanguageParsing.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets"
+          Condition="Exists('..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets')" />
+
+</Project>

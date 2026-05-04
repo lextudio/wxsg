@@ -9,5 +9,12 @@
     <TextBlock Margin="0,8,0,0">
       <Span>Nested span inline text</Span>
     </TextBlock>
+    <!-- Regression: multi-line text node content must have \n and \t escaped in the
+         generated string literal; previously AsStringLiteral() emitted raw newlines
+         causing CS1010 "Newline in constant" in the generated .g.cs file. -->
+    <TextBlock TextWrapping="WrapWithOverflow" Margin="0,8,0,0">
+      <Run x:Name="MultiLineRun">This text spans
+        multiple lines with tabs	and newlines.</Run>
+    </TextBlock>
   </StackPanel>
 </Window>

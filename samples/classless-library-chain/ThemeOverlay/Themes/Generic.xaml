@@ -1,0 +1,15 @@
+<!--
+  Classless ResourceDictionary in a theme library (ThemeOverlay) that references
+  another WXSG-enabled library (ClasslessOnlyLibrary).
+
+  Both assemblies get a generated __WxsgThemeLoader.  Because it is declared
+  'internal', the C# compiler no longer raises CS0436 when compiling ThemeOverlay.
+
+  Regression: __WxsgThemeLoader was previously 'public', causing CS0436 in any
+  project that referenced a WXSG-enabled library and itself had classless pages.
+  Pattern observed in AvalonDock.Themes.VS2013 referencing AvalonDock.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="OverlayAccentBrush" Color="#FF0078D4" />
+</ResourceDictionary>

@@ -79,7 +79,7 @@ internal static class MarkupExtensionResolver
 
             // For non-CSharp markup extensions, keep the source text as a literal.
             // The emitter can later lower known forms (x:Type/x:Static/DynamicResource/etc.).
-            return (AsStringLiteral(rawValue), ResolvedValueKind.Literal);
+            return (Emission.CodeGenUtilities.EscapeStringLiteral(rawValue), ResolvedValueKind.Literal);
         }
 
         if (TryParseInlineCSharpExpression(rawValue, context, out var fallbackCsharpExpression))
@@ -87,7 +87,7 @@ internal static class MarkupExtensionResolver
             return (fallbackCsharpExpression, ResolvedValueKind.MarkupExtension);
         }
 
-        return (AsStringLiteral(rawValue), ResolvedValueKind.Literal);
+        return (Emission.CodeGenUtilities.EscapeStringLiteral(rawValue), ResolvedValueKind.Literal);
     }
 
     internal static bool TryConvertTypeMarkupExtension(
@@ -352,7 +352,7 @@ internal static class MarkupExtensionResolver
             sb.Append(kvp.Value);
         }
 
-        encoding = AsStringLiteral(sb.ToString());
+        encoding = Emission.CodeGenUtilities.EscapeStringLiteral(sb.ToString());
         return true;
     }
 
@@ -437,7 +437,7 @@ internal static class MarkupExtensionResolver
             // Build the fully-qualified XAML format: "{x:Static clr-namespace:namespace;assembly=assemblyName:Type.Member}"
             // If clrNamespace starts with "xmlns:", the emitter knows to look up the XML namespace at runtime
             var asmPart = !string.IsNullOrWhiteSpace(assemblyName) ? $";assembly={assemblyName}" : string.Empty;
-            qualifiedExpr = AsStringLiteral($"{{x:Static clr-namespace:{clrNamespace}{asmPart}:{typeName}.{memberName}}}");
+            qualifiedExpr = Emission.CodeGenUtilities.EscapeStringLiteral($"{{x:Static clr-namespace:{clrNamespace}{asmPart}:{typeName}.{memberName}}}");
             return true;
         }
         catch
@@ -532,7 +532,7 @@ internal static class MarkupExtensionResolver
 
         // Format as {x:Static clr-namespace:namespace;assembly=assemblyName:TypeName.MemberName}
         // The emitter will parse this as: extract namespace from before ';', extract member from after final ':'
-        resolvedExpr = AsStringLiteral($"{{x:Static clr-namespace:{namespaceName};assembly={assemblyName}:{resolvedType.Name}.{memberName}}}");
+        resolvedExpr = Emission.CodeGenUtilities.EscapeStringLiteral($"{{x:Static clr-namespace:{namespaceName};assembly={assemblyName}:{resolvedType.Name}.{memberName}}}");
         return true;
     }
 
@@ -699,10 +699,5 @@ internal static class MarkupExtensionResolver
         }
 
         return token.Length == 0 ? null : token;
-    }
-
-    internal static string AsStringLiteral(string value)
-    {
-        return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     }
 }

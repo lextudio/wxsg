@@ -74,7 +74,12 @@ internal static class CodeGenUtilities
 
     internal static string EscapeStringLiteral(string value)
     {
-        return "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        return "\"" + value
+            .Replace("\\", "\\\\")
+            .Replace("\"", "\\\"")
+            .Replace("\r", "\\r")
+            .Replace("\n", "\\n")
+            .Replace("\t", "\\t") + "\"";
     }
 
     internal static string BuildStringArrayExpression(string[] items)

@@ -163,7 +163,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             var inlineTextContent = (node.RawTextContent ?? node.TextContent)?.Trim();
             if (!string.IsNullOrWhiteSpace(inlineTextContent))
             {
-                var literalExpression = MarkupExtensionResolver.AsStringLiteral(inlineTextContent);
+                var literalExpression = CodeGenUtilities.EscapeStringLiteral(inlineTextContent);
                 var handledAsContentProperty = false;
 
                 if (!string.IsNullOrWhiteSpace(contentPropertyName) &&
@@ -251,7 +251,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             PropertyAssignments: ImmutableArray.Create(
                 new ResolvedPropertyAssignment(
                     PropertyName: "Text",
-                    ValueExpression: MarkupExtensionResolver.AsStringLiteral(inlineTextContent),
+                    ValueExpression: CodeGenUtilities.EscapeStringLiteral(inlineTextContent),
                     ClrPropertyOwnerTypeName: "global::System.Windows.Documents.Run",
                     ClrPropertyTypeName: "global::System.String",
                     Line: line,
@@ -669,7 +669,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             return null;
         }
 
-        return MarkupExtensionResolver.AsStringLiteral(key.Trim());
+        return CodeGenUtilities.EscapeStringLiteral(key.Trim());
     }
 
     private static string ToDisplayName(INamedTypeSymbol symbol) =>

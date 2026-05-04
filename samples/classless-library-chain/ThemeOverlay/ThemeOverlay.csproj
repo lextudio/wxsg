@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props"
+          Condition="Exists('..\..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.props')" />
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <!--
+      Regression test for CS0436: when a theme library (ThemeOverlay) references a base
+      library (ClasslessOnlyLibrary) that also uses WXSG, both assemblies get a generated
+      __WxsgThemeLoader class.  Because the class was previously declared 'public', the
+      C# compiler raises CS0436 ("type conflicts with imported type") when compiling the
+      theme library.  Making the class 'internal' removes the visibility conflict.
+    -->
+    <TargetFrameworks>net10.0-windows;net48</TargetFrameworks>
+    <UseWPF>true</UseWPF>
+    <WpfXsgEnabled>true</WpfXsgEnabled>
+    <WpfXsgCSharpMode>true</WpfXsgCSharpMode>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\classless-only-library\ClasslessOnlyLibrary.csproj"
+                      ReferenceOutputAssembly="true" />
+
+    <ProjectReference Include="..\..\..\src\XamlToCSharpGenerator.Generator.WPF\XamlToCSharpGenerator.Generator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\src\XamlToCSharpGenerator.WPF\XamlToCSharpGenerator.WPF.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Compiler\XamlToCSharpGenerator.Compiler.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Core\XamlToCSharpGenerator.Core.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.ExpressionSemantics\XamlToCSharpGenerator.ExpressionSemantics.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.Framework.Abstractions\XamlToCSharpGenerator.Framework.Abstractions.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\..\external\XamlToCSharpGenerator\src\XamlToCSharpGenerator.MiniLanguageParsing\XamlToCSharpGenerator.MiniLanguageParsing.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets"
+          Condition="Exists('..\..\..\src\XamlToCSharpGenerator.Build.WPF\buildTransitive\XamlToCSharpGenerator.Build.WPF.targets')" />
+
+</Project>

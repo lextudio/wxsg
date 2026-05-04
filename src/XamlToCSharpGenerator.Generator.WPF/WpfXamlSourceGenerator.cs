@@ -415,7 +415,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("    /// (theme dictionaries, generic.xaml, etc.) into Application.Resources at");
         sb.AppendLine("    /// assembly load time. This replaces WPF's BAML-based theme/template lookup.");
         sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    public static class __WxsgThemeLoader");
+        sb.AppendLine("    internal static class __WxsgThemeLoader");
         sb.AppendLine("    {");
         sb.AppendLine("        private static bool __wxsg_debug => global::System.Environment.GetEnvironmentVariable(\"WXSG_DEBUG\") != null;");
         sb.AppendLine("        private static readonly string __wxsg_log =");
@@ -480,9 +480,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("            catch (global::System.Exception ex) { __wxsg_trace($\"[theme] Initialize exception: {ex.Message}\"); }");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        // Public helper to allow host applications to register/merge this assembly's\n");
-        sb.AppendLine("        // classless resource dictionaries early during Application startup.\n");
-        sb.AppendLine("        public static void RegisterForAppResources()");
+        sb.AppendLine("        internal static void RegisterForAppResources()");
         sb.AppendLine("        {");
         sb.AppendLine("            var app = global::System.Windows.Application.Current;");
         sb.AppendLine("            if (app is null) return;");

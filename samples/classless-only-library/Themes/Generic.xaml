@@ -1,0 +1,34 @@
+<!--
+  Classless resource dictionary — no x:Class, no code-behind.
+  This is the sole XAML file in the library; there is no App.xaml.
+
+  WXSG must generate __WxsgThemeLoader for this project so that the
+  containing application can merge these styles into Application.Resources
+  at runtime via the [ModuleInitializer]-triggered RegisterForAppResources().
+
+  Regression: previously the build targets skipped classless page processing
+  when _WxsgHasClassedPages was false (no classed pages in the project), so
+  __WxsgThemeLoader was never emitted and Template remained null at runtime.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:ClasslessOnlyLibrary">
+    <Style TargetType="{x:Type local:CustomTextBox}">
+        <Setter Property="Background" Value="AliceBlue" />
+        <Setter Property="BorderBrush" Value="SteelBlue" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type local:CustomTextBox}">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <ScrollViewer x:Name="PART_ContentHost" />
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

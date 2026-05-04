@@ -145,9 +145,9 @@
     -->
     <ItemGroup>
       <_WxsgClassedPage Include="@(Page)"
-        Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and $([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
+        Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and $([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(FullPath)')), 'x:Class\s*='))" />
       <_WxsgClasslessPage Include="@(Page)"
-        Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
+        Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(FullPath)')), 'x:Class\s*='))" />
     </ItemGroup>
 
     <!-- Capture as a property so it can be used safely in per-item batching conditions below. -->
@@ -562,7 +562,7 @@
       <!-- Select Page items that do NOT contain x:Class (classless/theme dictionaries). -->
       <ItemGroup>
         <_WxsgClasslessToProcess Include="@(Page)"
-          Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.IO.File]::ReadAllText('%(FullPath)').Contains('x:Class'))" />
+          Condition="'%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)')) and !$([System.Text.RegularExpressions.Regex]::IsMatch($([System.IO.File]::ReadAllText('%(FullPath)')), 'x:Class\s*='))" />
       </ItemGroup>
 
       <!--
@@ -1014,7 +1014,7 @@
   -->
   <Target Name="_WxsgBamlBypass"
           AfterTargets="CoreCompile"
-      Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and '@(_WxsgDeferredClasslessPage)' != '' and !$(MSBuildProjectName.Contains('_wpftmp')) and '$(MSBuildRuntimeType)' != 'Core'">
+      Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and '@(_WxsgDeferredClasslessPage)' != '' and !$(MSBuildProjectName.Contains('_wpftmp'))">
 
     <Message Importance="High"
              Text="[WXSG_DEBUG] _WxsgBamlBypass: starting post-CoreCompile BAML bypass for project=$(MSBuildProjectName)"
@@ -1047,7 +1047,8 @@
         Language="$(Language)"
         OutputPath="$(IntermediateOutputPath)"
         OutputType="$(OutputType)"
-        References="@(_WxsgPass2References)" />
+        References="@(_WxsgPass2References)"
+        ContinueOnError="WarnAndContinue" />
 
     <Message Importance="High"
              Text="[WXSG_DEBUG] _WxsgBamlBypass: MarkupCompilePass2 completed"

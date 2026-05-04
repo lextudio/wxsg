@@ -339,6 +339,12 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
 
         Assert.Contains(".Inlines.Add(__node", generatedCode, StringComparison.Ordinal);
         Assert.DoesNotContain(".Inlines =", generatedCode, StringComparison.Ordinal);
+
+        // Regression: multi-line XAML text content must be escaped in the generated string
+        // literal. Previously AsStringLiteral() emitted raw newlines/tabs, causing CS1010
+        // "Newline in constant" errors in the generated .g.cs file.
+        Assert.Contains("\\n", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("\\t", generatedCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -509,6 +515,12 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         // theme style, leaving Template null and the window black.
         Assert.DoesNotContain("__WxsgOverrideDefaultStyleKey", generatedCode, StringComparison.Ordinal);
         Assert.DoesNotContain("DefaultStyleKeyProperty.OverrideMetadata", generatedCode, StringComparison.Ordinal);
+
+        // Regression: x:Class = "..." (spaces around =) must be recognized as a classed page.
+        // Previously Contains('x:Class=') missed this form, misclassifying SecondWindow.xaml as
+        // classless and never generating its InitializeComponent (pattern: SharpDevelop WpfWorkbench.xaml).
+        Assert.Contains("SecondWindow", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("partial class SecondWindow", generatedCode, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -771,6 +783,110 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
                 .Append(" -f ")
                 .Append(framework)
                 .ToString());
+    }
+
+    // -------------------------------------------------------------------------
+    // ClasslessOnlyLibrary — library-only project with no App.xaml and no
+    // classed pages; verifies __WxsgThemeLoader is still generated.
+    //
+    // Regression: WXSG build targets gated classless page processing on
+    // _WxsgHasClassedPages == 'true', so library-only projects (such as
+    // SharpDevelop's AvalonEdit.AddIn) never got __WxsgThemeLoader, leaving
+    // DefaultStyleKey-based controls with null Template at runtime.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ClasslessOnlyLibrary_Net10_Generates_WxsgThemeLoader()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        using var artifact = BuildSampleForFramework(
+            "samples/classless-only-library/ClasslessOnlyLibrary.csproj",
+            "net10.0-windows",
+            "classless-only-library-net10");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        // Library-only project with only a classless Themes/Generic.xaml must
+        // still get __WxsgThemeLoader generated so its styles merge into
+        // Application.Resources at runtime.
+        Assert.Contains("__WxsgThemeLoader", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("RegisterForAppResources", generatedCode, StringComparison.Ordinal);
+
+        // The classless page path must appear so __WxsgThemeLoader knows what to load.
+        Assert.Contains("Themes/Generic.xaml", generatedCode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ClasslessOnlyLibrary_Net48_Generates_WxsgThemeLoader()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        using var artifact = BuildSampleForFramework(
+            "samples/classless-only-library/ClasslessOnlyLibrary.csproj",
+            "net48",
+            "classless-only-library-net48");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        Assert.Contains("__WxsgThemeLoader", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("RegisterForAppResources", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("Themes/Generic.xaml", generatedCode, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // -------------------------------------------------------------------------
+    // ClasslessLibraryChain — theme library referencing another WXSG-enabled
+    // library; both assemblies generate __WxsgThemeLoader.
+    //
+    // Regression: __WxsgThemeLoader was declared 'public', causing CS0436 when
+    // a second WXSG-enabled library referenced a first one (both in the same
+    // compilation). Pattern: AvalonDock.Themes.VS2013 referencing AvalonDock.
+    // Fix: __WxsgThemeLoader is now 'internal'.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void ClasslessLibraryChain_BuildsWithoutCS0436()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        using var artifact = BuildSampleForFramework(
+            "samples/classless-library-chain/ThemeOverlay/ThemeOverlay.csproj",
+            "net10.0-windows",
+            "classless-library-chain-net10");
+
+        // Build succeeding without CS0436 is the regression check.
+        // Additionally verify __WxsgThemeLoader is internal in the generated output.
+        var generatedCode = artifact.ReadGeneratedCSharp();
+        Assert.Contains("internal static class __WxsgThemeLoader", generatedCode, StringComparison.Ordinal);
+    }
+
+    // -------------------------------------------------------------------------
+    // GeometryInClasslessXaml — abstract Geometry type (text-node value) inside
+    // a classless ResourceDictionary; verifies build succeeds.
+    //
+    // SharpDevelop's QueryView.xaml used <Geometry x:Key="...">path data</Geometry>.
+    // The abstract Geometry type requires a TypeConverter and cannot be new'd up.
+    // WXSG must handle this in classless pages (deferred via raw XAML path) just
+    // as it handles it in classed Window XAML (covered by geometry-textnode sample).
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void GeometryInClasslessXaml_Sample_Builds_Successfully()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        using var artifact = BuildSample(
+            "samples/geometry-in-classless-xaml/GeometryInClasslessXamlSample.csproj",
+            "wpf-sample-geometry-in-classless-xaml");
+
+        // Build succeeding is sufficient: it validates that WXSG does not attempt
+        // new Geometry() for abstract types in classless resource dictionaries.
+        var generatedCode = artifact.ReadGeneratedCSharp();
+        Assert.NotEmpty(generatedCode);
     }
 
     private static SampleBuildArtifact BuildSampleForFramework(
