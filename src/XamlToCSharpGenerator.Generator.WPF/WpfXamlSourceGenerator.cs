@@ -33,6 +33,8 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
     private const string ClasslessPageGroup = "ClasslessPage";
     private const string SourceItemGroupMetadataKey = "build_metadata.AdditionalFiles.SourceItemGroup";
     private const string TargetPathMetadataKey = "build_metadata.AdditionalFiles.TargetPath";
+    private const string ClasslessGenerationLogFileName = "wxsg_theme_loader.log";
+    private const string DefaultClasslessDiagnosticsAssembly = "ICSharpCode.AvalonEdit.AddIn";
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -111,14 +113,44 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
             var appXamls = pair.Left.Right;
             var asmName = pair.Right;
 
-            if (paths.IsDefaultOrEmpty || string.IsNullOrEmpty(asmName))
+            if (string.IsNullOrEmpty(asmName))
                 return;
+
+            var shouldTrace = ShouldTraceClasslessGeneration(asmName);
+            if (shouldTrace)
+            {
+                TraceClasslessGeneration(asmName,
+                    $"[gen] begin: classlessCount={paths.Length}, appXamlCount={appXamls.Length}");
+
+                if (!paths.IsDefaultOrEmpty)
+                {
+                    foreach (var p in paths)
+                        TraceClasslessGeneration(asmName, $"[gen] classless path: {p}");
+                }
+            }
+
+            // Assemblies with no App.xaml but WITH classless pages still need __WxsgThemeLoader
+            // to merge those pages into Application.Resources at runtime. This enables libraries
+            // to provide their own themes/generic.xaml without requiring a host app to load them.
+            if (paths.IsDefaultOrEmpty && appXamls.IsDefaultOrEmpty)
+            {
+                if (shouldTrace)
+                    TraceClasslessGeneration(asmName, "[gen] skip: no classless paths and no App.xaml");
+                return;
+            }
 
             // Determine which component-relative directories are already declared in the
             // application's own MergedDictionaries (App.xaml). ClasslessPages whose directory
             // is managed by the app are theme variants selected at runtime — auto-merging all
             // of them would leave stale variants in Application.Resources after a theme switch.
             var appManagedDirs = ExtractAppManagedDirectories(appXamls, asmName);
+            if (shouldTrace)
+            {
+                TraceClasslessGeneration(asmName,
+                    $"[gen] app-managed dirs count={appManagedDirs.Count}");
+                foreach (var dir in appManagedDirs)
+                    TraceClasslessGeneration(asmName, $"[gen] app-managed dir: {dir}");
+            }
 
             // Emit ModuleInitializerAttribute polyfill so [ModuleInitializer] compiles on
             // .NET Framework 4.x targets where System.Runtime.CompilerServices does not yet
@@ -133,7 +165,38 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
 
             // Emit the actual theme loader.
             spc.AddSource("__WxsgThemeLoader.wpf.g.cs", BuildThemeLoaderSource(asmName, paths, appManagedDirs));
+            if (shouldTrace)
+                TraceClasslessGeneration(asmName, "[gen] emitted: __WxsgModuleInitializerPolyfill, __WxsgClasslessXamlLoader, __WxsgThemeLoader");
         });
+    }
+
+    private static bool ShouldTraceClasslessGeneration(string assemblyName)
+    {
+        if (string.IsNullOrWhiteSpace(assemblyName))
+            return false;
+
+        if (System.Environment.GetEnvironmentVariable("WXSG_DEBUG") is null)
+            return false;
+
+        var configuredAssembly = System.Environment.GetEnvironmentVariable("WXSG_DEBUG_THEME_ASSEMBLY");
+        if (string.IsNullOrWhiteSpace(configuredAssembly))
+            configuredAssembly = DefaultClasslessDiagnosticsAssembly;
+
+        return string.Equals(assemblyName, configuredAssembly, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void TraceClasslessGeneration(string assemblyName, string message)
+    {
+        try
+        {
+            var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), ClasslessGenerationLogFileName);
+            var line = $"{System.DateTime.UtcNow:O} [{assemblyName}] {message}{System.Environment.NewLine}";
+            System.IO.File.AppendAllText(logPath, line);
+        }
+        catch
+        {
+            // Keep source generation resilient even when diagnostics logging fails.
+        }
     }
 
     /// <summary>
@@ -357,6 +420,11 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("        private static bool __wxsg_debug => global::System.Environment.GetEnvironmentVariable(\"WXSG_DEBUG\") != null;");
         sb.AppendLine("        private static readonly string __wxsg_log =");
         sb.AppendLine("            global::System.IO.Path.Combine(global::System.IO.Path.GetTempPath(), \"wxsg_theme_loader.log\");");
+        sb.AppendLine("        private static bool __wxsg_startup_hooked = false;");
+        sb.AppendLine("        private static readonly global::System.Reflection.Assembly __wxsg_targetAssembly = typeof(__WxsgThemeLoader).Assembly;");
+        sb.AppendLine("        private static readonly global::System.Reflection.FieldInfo? __wxsg_defaultStyleKeyField =");
+        sb.AppendLine("            typeof(global::System.Windows.FrameworkElement).GetField(\"DefaultStyleKeyProperty\",");
+        sb.AppendLine("                global::System.Reflection.BindingFlags.Static | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic);");
         sb.AppendLine("        private static void __wxsg_trace(string msg)");
         sb.AppendLine("        {");
         sb.AppendLine("            if (__wxsg_debug)");
@@ -370,18 +438,35 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("            var app = global::System.Windows.Application.Current;");
         sb.AppendLine("            if (app is null)");
         sb.AppendLine("            {");
-        sb.AppendLine("                __wxsg_trace(\"[theme] app is null, deferring\");");
+        sb.AppendLine("                __wxsg_trace(\"[theme] app is null, deferring to Startup event\");");
         sb.AppendLine("                // Assembly loaded before Application was created (e.g. during static init).");
-        sb.AppendLine("                // Defer the merge to the UI thread message queue; Application will be set by then.");
+        sb.AppendLine("                // Hook the Startup event to merge themes early, before any windows are created.");
         sb.AppendLine("                try");
         sb.AppendLine("                {");
-        sb.AppendLine("                    global::System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(");
-        sb.AppendLine("                        new global::System.Action(() =>");
+        sb.AppendLine("                    if (!__wxsg_startup_hooked)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        __wxsg_startup_hooked = true;");
+        sb.AppendLine("                        // Attempt to access the current dispatcher; if it fails, defer to later check");
+        sb.AppendLine("                        try");
         sb.AppendLine("                        {");
-        sb.AppendLine("                            var deferredApp = global::System.Windows.Application.Current;");
-        sb.AppendLine("                            __wxsg_trace($\"[theme] deferred app={deferredApp}\");");
-        sb.AppendLine("                            if (deferredApp is not null) MergeResources(deferredApp);");
-        sb.AppendLine("                        }));");
+        sb.AppendLine("                            global::System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(");
+        sb.AppendLine("                                global::System.Windows.Threading.DispatcherPriority.Send,");
+        sb.AppendLine("                                new global::System.Action(() =>");
+        sb.AppendLine("                                {");
+        sb.AppendLine("                                    var startupApp = global::System.Windows.Application.Current;");
+        sb.AppendLine("                                    if (startupApp is not null)");
+        sb.AppendLine("                                    {");
+        sb.AppendLine("                                        startupApp.Startup += (s, e) =>");
+        sb.AppendLine("                                        {");
+        sb.AppendLine("                                            __wxsg_trace(\"[theme] Startup event, merging themes\");");
+        sb.AppendLine("                                            MergeResources((global::System.Windows.Application)s);");
+        sb.AppendLine("                                        };");
+        sb.AppendLine("                                        __wxsg_trace(\"[theme] Startup handler registered\");");
+        sb.AppendLine("                                    }");
+        sb.AppendLine("                                }));");
+        sb.AppendLine("                        }");
+        sb.AppendLine("                        catch (global::System.Exception dex) { __wxsg_trace($\"[theme] dispatcher invoke failed: {dex.Message}\"); }");
+        sb.AppendLine("                    }");
         sb.AppendLine("                }");
         sb.AppendLine("                catch (global::System.Exception ex) { __wxsg_trace($\"[theme] defer exception: {ex.Message}\"); }");
         sb.AppendLine("                return;");
@@ -406,6 +491,7 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        private static void MergeResources(global::System.Windows.Application app)");
         sb.AppendLine("        {");
+        sb.AppendLine("            var __wxsg_mergedAny = false;");
         foreach (var path in targetPaths)
         {
             if (ShouldSkipAutoMergingThemeVariant(path, appManagedDirs))
@@ -414,11 +500,15 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
             }
 
             var packUri = $"pack://application:,,,/{assemblyName};component/{path}";
-            sb.AppendLine($"            MergeDict(app, \"{packUri}\");");
+            sb.AppendLine($"            MergeDict(app, \"{packUri}\", ref __wxsg_mergedAny);");
         }
+        sb.AppendLine("            if (__wxsg_mergedAny)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                RefreshImplicitStylesForOpenWindows(app);");
+        sb.AppendLine("            }");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        private static void MergeDict(global::System.Windows.Application app, string uri)");
+        sb.AppendLine("        private static void MergeDict(global::System.Windows.Application app, string uri, ref bool mergedAny)");
         sb.AppendLine("        {");
         sb.AppendLine("            try");
         sb.AppendLine("            {");
@@ -434,9 +524,90 @@ public sealed class WpfXamlSourceGenerator : IIncrementalGenerator
         sb.AppendLine("                    }");
         sb.AppendLine("                }");
         sb.AppendLine("                app.Resources.MergedDictionaries.Add(__wxsg_rd);");
+        sb.AppendLine("                mergedAny = true;");
         sb.AppendLine("                __wxsg_trace($\"[theme] merged {uri}; count={app.Resources.MergedDictionaries.Count}\");");
         sb.AppendLine("            }");
         sb.AppendLine("            catch (global::System.Exception ex) { __wxsg_trace($\"[theme] MergeDict failed {uri}: {ex.GetType().FullName}: {ex.Message}\"); }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        private static void RefreshImplicitStylesForOpenWindows(global::System.Windows.Application app)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            try");
+        sb.AppendLine("            {");
+        sb.AppendLine("                for (int i = 0; i < app.Windows.Count; i++)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    if (app.Windows[i] is global::System.Windows.Window win)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        RefreshImplicitStylesInTree(win);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
+        sb.AppendLine("                if (app.Dispatcher != null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    app.Dispatcher.BeginInvoke(");
+        sb.AppendLine("                        global::System.Windows.Threading.DispatcherPriority.Loaded,");
+        sb.AppendLine("                        new global::System.Action(() =>");
+        sb.AppendLine("                        {");
+        sb.AppendLine("                            try");
+        sb.AppendLine("                            {");
+        sb.AppendLine("                                for (int j = 0; j < app.Windows.Count; j++)");
+        sb.AppendLine("                                {");
+        sb.AppendLine("                                    if (app.Windows[j] is global::System.Windows.Window loadedWin)");
+        sb.AppendLine("                                    {");
+        sb.AppendLine("                                        RefreshImplicitStylesInTree(loadedWin);");
+        sb.AppendLine("                                    }");
+        sb.AppendLine("                                }");
+        sb.AppendLine("                            }");
+        sb.AppendLine("                            catch (global::System.Exception lateEx) { __wxsg_trace($\"[theme] delayed style refresh failed: {lateEx.Message}\"); }");
+        sb.AppendLine("                        }));");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("            catch (global::System.Exception ex) { __wxsg_trace($\"[theme] style refresh failed: {ex.Message}\"); }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        private static void RefreshImplicitStylesInTree(global::System.Windows.DependencyObject root)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (root is global::System.Windows.FrameworkElement fe)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                TryApplyImplicitStyle(fe);");
+        sb.AppendLine("            }");
+        sb.AppendLine("            int childCount;");
+        sb.AppendLine("            try { childCount = global::System.Windows.Media.VisualTreeHelper.GetChildrenCount(root); }");
+        sb.AppendLine("            catch { return; }");
+        sb.AppendLine("            for (int i = 0; i < childCount; i++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                var child = global::System.Windows.Media.VisualTreeHelper.GetChild(root, i);");
+        sb.AppendLine("                if (child != null)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    RefreshImplicitStylesInTree(child);");
+        sb.AppendLine("                }");
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        private static void TryApplyImplicitStyle(global::System.Windows.FrameworkElement fe)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (fe.Style != null)");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            if (fe is global::System.Windows.Controls.Control existingControl && existingControl.Template != null)");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            var styleKeyProperty = __wxsg_defaultStyleKeyField?.GetValue(null) as global::System.Windows.DependencyProperty;");
+        sb.AppendLine("            if (styleKeyProperty is null)");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            var styleKey = fe.GetValue(styleKeyProperty) as global::System.Type;");
+        sb.AppendLine("            if (styleKey is null)");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            if (!styleKey.IsAssignableFrom(fe.GetType()))");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            if (!global::System.Object.ReferenceEquals(styleKey.Assembly, __wxsg_targetAssembly))");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            var style = fe.TryFindResource(styleKey) as global::System.Windows.Style;");
+        sb.AppendLine("            if (style is null)");
+        sb.AppendLine("                return;");
+        sb.AppendLine("            fe.Style = style;");
+        sb.AppendLine("            if (fe is global::System.Windows.Controls.Control control)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                control.ApplyTemplate();");
+        sb.AppendLine("            }");
+        sb.AppendLine("            __wxsg_trace($\"[theme] applied implicit style to {fe.GetType().FullName}\");");
         sb.AppendLine("        }");
         sb.AppendLine("    }");
         sb.AppendLine("}");

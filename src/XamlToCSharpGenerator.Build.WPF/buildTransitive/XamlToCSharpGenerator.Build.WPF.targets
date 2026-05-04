@@ -206,6 +206,9 @@
         Feed classless XAML into Roslyn as AdditionalFiles with SourceItemGroup=ClasslessPage.
         The source generator emits __WxsgThemeLoader to merge them into Application.Resources
         at runtime — for explicit TryFindResource and implicit-style scenarios.
+
+        This MUST happen for ALL assemblies, including those with no App.xaml or classed pages,
+        so that libraries can provide themes/generic.xaml without requiring a host application.
       -->
       <AdditionalFiles Include="@(_WxsgClasslessPage)">
         <SourceItemGroup>ClasslessPage</SourceItemGroup>
@@ -244,6 +247,14 @@
       -->
       <_WxsgDeferredClasslessPage Include="@(_WxsgClasslessPage)"
         Condition="'$(_WxsgHasClassedPages)' == 'true' and '%(FullPath)' != '' and $([System.IO.File]::Exists('%(FullPath)'))" />
+
+      <!--
+        Also include any Page items that are explicitly in the project file but are classless.
+        This handles cases where project files pre-declare classless pages as <Page> items.
+        Match by identity (relative path) with _WxsgClasslessPage to identify them.
+      -->
+      <_WxsgDeferredClasslessPage Include="@(Page)"
+        Condition="'$(_WxsgHasClassedPages)' == 'true' and '@(_WxsgClasslessPage->WithMetadataValue('Identity', '%(Identity)'))' != ''" />
 
       <Page Remove="@(_WxsgDeferredClasslessPage)" />
       <None Include="@(_WxsgDeferredClasslessPage)" />
@@ -1003,7 +1014,7 @@
   -->
   <Target Name="_WxsgBamlBypass"
           AfterTargets="CoreCompile"
-          Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and '@(_WxsgDeferredClasslessPage)' != '' and !$(MSBuildProjectName.Contains('_wpftmp'))">
+      Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgCSharpMode)' == 'true' and '@(_WxsgDeferredClasslessPage)' != '' and !$(MSBuildProjectName.Contains('_wpftmp')) and '$(MSBuildRuntimeType)' != 'Core'">
 
     <Message Importance="High"
              Text="[WXSG_DEBUG] _WxsgBamlBypass: starting post-CoreCompile BAML bypass for project=$(MSBuildProjectName)"
