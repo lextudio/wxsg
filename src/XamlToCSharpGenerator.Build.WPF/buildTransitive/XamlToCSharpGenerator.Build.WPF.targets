@@ -29,7 +29,25 @@
   <!-- Forward WpfXsgEmitGeneratedFiles to Roslyn's standard EmitCompilerGeneratedFiles. -->
   <PropertyGroup Condition="'$(WpfXsgEnabled)' == 'true' and '$(WpfXsgEmitGeneratedFiles)' == 'true'">
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
+    <!--
+      Provide a sensible default for Roslyn's CompilerGeneratedFilesOutputPath so
+      that emitted files are written to disk by default without forcing users to
+      explicitly supply a path. Respect any user-provided value.
+    -->
+    <CompilerGeneratedFilesOutputPath Condition="'$(CompilerGeneratedFilesOutputPath)' == ''">$(IntermediateOutputPath)generated</CompilerGeneratedFilesOutputPath>
   </PropertyGroup>
+
+  <!--
+    Prevent on-disk emitted files from being picked up by the SDK's default
+    Compile/None/EmbeddedResource globs. This avoids duplicate-type errors when
+    EmitCompilerGeneratedFiles writes generated sources to disk and the generator
+    also supplies identical sources in-memory to the compiler.
+  -->
+  <ItemGroup Condition="'$(CompilerGeneratedFilesOutputPath)' != ''">
+    <Compile Remove="$(CompilerGeneratedFilesOutputPath)\**\*.cs" />
+    <None Remove="$(CompilerGeneratedFilesOutputPath)\**\*" />
+    <EmbeddedResource Remove="$(CompilerGeneratedFilesOutputPath)\**\*" />
+  </ItemGroup>
 
   <PropertyGroup>
     <WpfXsgTargetLanguageNormalized Condition="'$(WpfXsgTargetLanguage)' == 'C#'">CSharp</WpfXsgTargetLanguageNormalized>

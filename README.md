@@ -153,6 +153,7 @@ Set `WpfXsgEmitGeneratedFiles` in your project file:
 ```xml
 <PropertyGroup>
   <WpfXsgEmitGeneratedFiles>true</WpfXsgEmitGeneratedFiles>
+  <CompilerGeneratedFilesOutputPath>$(IntermediateOutputPath)generated</CompilerGeneratedFilesOutputPath> <!-- optional: WXSG provides this default when WpfXsgEmitGeneratedFiles is enabled -->
 </PropertyGroup>
 ```
 

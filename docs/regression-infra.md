@@ -46,6 +46,7 @@ Use the following as a baseline for samples:
   <WpfXsgEmitGeneratedFiles>true</WpfXsgEmitGeneratedFiles>
   <WpfXsgLanguageSupported>true</WpfXsgLanguageSupported>
   <XamlSourceGenEnabled>true</XamlSourceGenEnabled>
+  <CompilerGeneratedFilesOutputPath>$(IntermediateOutputPath)generated\</CompilerGeneratedFilesOutputPath>
   <LangVersion>latest</LangVersion>
   <Nullable>enable</Nullable>
 </PropertyGroup>
