@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis;
 
@@ -68,8 +70,7 @@ internal static class XmlnsDefinitionCache
                     list = new List<XmlnsDefinitionMapping>();
                     map[xmlNamespace] = list;
                 }
-
-                list.Add(new XmlnsDefinitionMapping(clrNamespace, mappedAssemblyName));
+                list.Add(new XmlnsDefinitionMapping(clrNamespace, mappedAssemblyName, assembly));
             }
         }
 
@@ -83,9 +84,10 @@ internal static class XmlnsDefinitionCache
 
             map[WpfPresentationXmlNamespace] = fallbackMappings;
         }
-
         return new XmlnsDefinitionCacheEntry(map);
     }
+
+
 
     internal static bool IsXmlnsDefinitionAttribute(AttributeData attribute)
     {
@@ -140,13 +142,126 @@ internal sealed class XmlnsDefinitionCacheEntry
 
 internal sealed class XmlnsDefinitionMapping
 {
-    public XmlnsDefinitionMapping(string clrNamespace, string? assemblyName)
+    public XmlnsDefinitionMapping(string clrNamespace, string? assemblyName, IAssemblySymbol? assemblySymbol = null)
     {
         ClrNamespace = clrNamespace;
         AssemblyName = assemblyName;
+        _assemblySymbol = assemblySymbol;
     }
+    private readonly IAssemblySymbol? _assemblySymbol;
 
     public string ClrNamespace { get; }
 
     public string? AssemblyName { get; }
+
+    public IEnumerable<ExportedMemberInfo> ExportedMemberInfos
+    {
+        get
+        {
+            if (_assemblySymbol == null)
+            {
+                return [];
+            }
+            return field ??= GetExportedMembers(_assemblySymbol);
+        }
+    }
+
+
+    private static IEnumerable<ExportedMemberInfo> GetExportedMembers(IAssemblySymbol assembly)
+    {
+        foreach (var type in GetAllTypes(assembly.GlobalNamespace))
+        {
+            if (!IsExported(type))
+                continue;
+
+            var typeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+            foreach (var member in type.GetMembers())
+            {
+                if (!IsExported(member))
+                    continue;
+
+                switch (member)
+                {
+                    case IPropertySymbol prop:
+                        yield return new ExportedMemberInfo(
+                            ContainingType: typeName,
+                            MemberName: prop.Name,
+                            MemberKind: MemberKinds.Property,
+                            TypeName: prop.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                        break;
+
+                    case IFieldSymbol field:
+                        yield return new ExportedMemberInfo(
+                            ContainingType: typeName,
+                            MemberName: field.Name,
+                            MemberKind: field.IsConst ? MemberKinds.ConstField : MemberKinds.Field,
+                            TypeName: field.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                        break;
+
+                    case IEventSymbol evt:
+                        yield return new ExportedMemberInfo(
+                            ContainingType: typeName,
+                            MemberName: evt.Name,
+                            MemberKind: MemberKinds.Event,
+                            TypeName: evt.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                        break;
+                }
+            }
+        }
+
+        static bool IsExported(ISymbol symbol)
+        {
+            return symbol.DeclaredAccessibility == Accessibility.Public || symbol.DeclaredAccessibility == Accessibility.Internal;
+        }
+        static IEnumerable<INamedTypeSymbol> GetAllTypes(INamespaceSymbol ns)
+        {
+            foreach (var t in ns.GetTypeMembers())
+            {
+                foreach (var nested in GetAllNestedTypes(t))
+                    yield return nested;
+            }
+
+            foreach (var childNs in ns.GetNamespaceMembers())
+            {
+                foreach (var t in GetAllTypes(childNs))
+                    yield return t;
+            }
+        }
+        static IEnumerable<INamedTypeSymbol> GetAllNestedTypes(INamedTypeSymbol type)
+        {
+            yield return type;
+
+            foreach (var nested in type.GetTypeMembers())
+            {
+                foreach (var child in GetAllNestedTypes(nested))
+                    yield return child;
+            }
+        }
+    }
+}
+
+[DebuggerDisplay("{MemberKind},ContainingType={ContainingType},MemberName={MemberName}")]
+public sealed class ExportedMemberInfo
+{
+    internal ExportedMemberInfo(string ContainingType, string MemberName, MemberKinds MemberKind, string TypeName)
+    {
+        this.ContainingType = ContainingType;
+        this.MemberName = MemberName;
+        this.MemberKind = MemberKind;
+        this.TypeName = TypeName;
+    }
+
+    public string ContainingType { get; }
+    public string MemberName { get; }
+    public MemberKinds MemberKind { get; }
+    public string TypeName { get; }
+}
+
+public enum MemberKinds
+{
+    Property,
+    ConstField,
+    Field,
+    Event,
 }
