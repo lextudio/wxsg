@@ -837,6 +837,48 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     // -------------------------------------------------------------------------
+    // PathStyleTrigger — covers lextudio/wxsg#12:
+    //   1. <Style TargetType="Path"> must resolve to System.Windows.Shapes.Path,
+    //      not System.IO.Path. The compile-time fast-path in CodeGenUtilities
+    //      cannot see WPF assemblies inside the Roslyn host, so unqualified XAML
+    //      type names must route through __WXSG_ResolveTypeToken at runtime.
+    //   2. <DataTrigger Value="False"> against a bool source must compare correctly.
+    // The sample is a runnable Exe whose self-check writes WXSG-SAMPLE-OK on
+    // success; runtime exception means Style.set_TargetType failed (issue 1) or
+    // the trigger did not fire (issue 2).
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void PathStyleTrigger_Sample_Runs_And_Resolves_Path_To_Shapes_Path()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var projectPath = Path.Combine(
+            repositoryRoot,
+            "samples",
+            "path-style-trigger",
+            "PathStyleTriggerSample.csproj");
+
+        var restoreOutput = RunProcess(repositoryRoot, "dotnet", RestoreArguments(projectPath));
+        Assert.True(restoreOutput.ExitCode == 0, restoreOutput.Output);
+
+        var runOutput = RunProcess(
+            repositoryRoot,
+            "dotnet",
+            "run --project \"" + projectPath + "\" -c Debug --no-restore /nodeReuse:false --disable-build-servers");
+
+        Assert.Contains("WXSG-SAMPLE-OK", runOutput.Output, StringComparison.Ordinal);
+        Assert.Equal(0, runOutput.ExitCode);
+
+        // Issue 1: must NOT misresolve "Path" to System.IO.Path in any generated source.
+        Assert.DoesNotContain("typeof(global::System.IO.Path)", runOutput.Output, StringComparison.Ordinal);
+    }
+
+    // -------------------------------------------------------------------------
     // ClasslessLibraryChain — theme library referencing another WXSG-enabled
     // library; both assemblies generate __WxsgThemeLoader.
     //

@@ -563,10 +563,21 @@ internal static class CodeGenUtilities
         {
             if (TryUnquote(valueExpression, out var __valueLiteral))
             {
-                var __rt = ResolveRuntimeType(__valueLiteral.Trim());
-                if (__rt is not null)
+                var __literal = __valueLiteral.Trim();
+
+                // Only use the compile-time fast path for fully qualified names. Short
+                // unqualified XAML names like "Path" must go through the runtime resolver
+                // (__WXSG_ResolveTypeToken) which is XAML-namespace-aware. The compile-time
+                // ResolveRuntimeType cannot see WPF assemblies inside a Roslyn host and
+                // can match BCL types by simple name (e.g. "Path" → System.IO.Path),
+                // breaking Style.set_TargetType at runtime (lextudio/wxsg#12).
+                if (__literal.IndexOf('.') >= 0)
                 {
-                    return "typeof(" + QualifyType(__rt.FullName) + ")";
+                    var __rt = ResolveRuntimeType(__literal);
+                    if (__rt is not null)
+                    {
+                        return "typeof(" + QualifyType(__rt.FullName) + ")";
+                    }
                 }
             }
 

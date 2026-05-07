@@ -97,14 +97,10 @@ internal static class TypeResolver
             return ResolveTypeSymbol(prefixXmlNamespace, xmlTypeName, ImmutableArray<string>.Empty, context);
         }
 
-        // CLR metadata token (for example "System.String").
-        var metadataSymbol = context.Compilation.GetTypeByMetadataName(trimmedToken);
-        if (metadataSymbol is not null)
-        {
-            return metadataSymbol;
-        }
-
-        // Default XML namespace fallback.
+        // Default XML namespace lookup. For unqualified XAML names (e.g. "Path") this
+        // must run BEFORE GetTypeByMetadataName, otherwise tokens like "Path" can match
+        // System.IO.Path or other unrelated BCL types via the global namespace and
+        // shadow the WPF presentation namespace registration (System.Windows.Shapes.Path).
         if (context.Document.XmlNamespaces.TryGetValue(string.Empty, out var defaultXmlNamespace))
         {
             var defaultResolved = ResolveTypeSymbol(defaultXmlNamespace, trimmedToken, ImmutableArray<string>.Empty, context);
@@ -112,6 +108,13 @@ internal static class TypeResolver
             {
                 return defaultResolved;
             }
+        }
+
+        // CLR metadata token (for example "System.String").
+        var metadataSymbol = context.Compilation.GetTypeByMetadataName(trimmedToken);
+        if (metadataSymbol is not null)
+        {
+            return metadataSymbol;
         }
 
         return null;
