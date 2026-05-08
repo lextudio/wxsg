@@ -1,0 +1,29 @@
+<Window x:Class="VisualMarkupExtensionTemplateSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:VisualMarkupExtensionTemplateSample"
+        Title="Visual Markup Extension in ControlTemplate" Height="200" Width="320">
+    <!--
+      Issue (lextudio/wxsg#14): A custom markup extension that returns a Visual
+      (TextBlock) used as Button.Content inside a ControlTemplate causes the
+      generated code to call FrameworkElementFactory.SetValue() with the
+      TextBlock result.  FrameworkElementFactory.SetValue() explicitly forbids
+      values derived from Visual or ContentElement and throws:
+        "'System.Windows.Controls.TextBlock' is not a valid value for
+         FrameworkElementFactory.SetValue; values derived from Visual or
+         ContentElement are not supported."
+      The fix is to call SetBinding() / use a TemplateBinding / or emit the
+      value via a different codepath that does not go through SetValue().
+    -->
+    <Window.Resources>
+        <ControlTemplate x:Key="RemoveButtonTemplate" TargetType="Button">
+            <Button Content="{local:SegoeIcon &#xECC9;}"
+                    ToolTip="Remove" />
+        </ControlTemplate>
+    </Window.Resources>
+    <Grid>
+        <Button x:Name="probeButton"
+                Template="{StaticResource RemoveButtonTemplate}"
+                Width="60" Height="30" />
+    </Grid>
+</Window>

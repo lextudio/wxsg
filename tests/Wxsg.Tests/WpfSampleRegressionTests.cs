@@ -931,6 +931,47 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
         Assert.NotEmpty(generatedCode);
     }
 
+    // -------------------------------------------------------------------------
+    // VisualMarkupExtensionTemplate — covers lextudio/wxsg#14:
+    //   A custom markup extension returning a Visual (TextBlock) used as
+    //   Button.Content inside a ControlTemplate caused the generator to emit
+    //   FrameworkElementFactory.SetValue(dp, ProvideValue()) which throws
+    //   NotSupportedException because FEF.SetValue rejects Visual-derived values.
+    //   Fix: in the FEF codegen path, pass the MarkupExtension instance itself
+    //   (via __WXSG_CreateUnknownMarkupExtensionForFef) so WPF defers ProvideValue
+    //   to template-instantiation time with the correct service context.
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public void VisualMarkupExtensionTemplate_Sample_Runs_Without_FefSetValue_Exception()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var repositoryRoot = GetWxsgRepositoryRoot();
+        var projectPath = Path.Combine(
+            repositoryRoot,
+            "samples",
+            "visual-markup-extension-template",
+            "VisualMarkupExtensionTemplateSample.csproj");
+
+        var restoreOutput = RunProcess(repositoryRoot, "dotnet", RestoreArguments(projectPath));
+        Assert.True(restoreOutput.ExitCode == 0, restoreOutput.Output);
+
+        var runOutput = RunProcess(
+            repositoryRoot,
+            "dotnet",
+            "run --project \"" + projectPath + "\" -c Debug --no-restore /nodeReuse:false --disable-build-servers");
+
+        Assert.Contains("WXSG-SAMPLE-OK", runOutput.Output, StringComparison.Ordinal);
+        Assert.Equal(0, runOutput.ExitCode);
+
+        // Confirm the FEF path now uses the deferred helper, not the evaluating one.
+        Assert.DoesNotContain("WXSG-SAMPLE-ERROR", runOutput.Output, StringComparison.Ordinal);
+    }
+
     private static SampleBuildArtifact BuildSampleForFramework(
         string relativeProjectPath,
         string framework,

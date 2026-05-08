@@ -1197,6 +1197,34 @@ internal sealed class GraphEmitter
                 continue;
             }
 
+            // Custom markup extensions inside a FrameworkElementFactory must be passed as
+            // MarkupExtension instances — not their ProvideValue() results — because
+            // FrameworkElementFactory.SetValue() rejects Visual/ContentElement values.
+            // WPF defers ProvideValue to template-instantiation time when it sees a MarkupExtension.
+            if (CodeGenUtilities.TryUnquote(assignment.ValueExpression, out var fefUmeLiteral) &&
+                fefUmeLiteral.Length > 0 && fefUmeLiteral[0] == '\x1e' &&
+                CodeGenUtilities.TryParseUnknownMarkupExtensionEncoding(fefUmeLiteral, out var fefUme))
+            {
+                var fefUmeExpr =
+                    "__WXSG_CreateUnknownMarkupExtensionForFef(" +
+                    CodeGenUtilities.EscapeStringLiteral(fefUme.NsUri) + ", " +
+                    CodeGenUtilities.EscapeStringLiteral(fefUme.LocalName) + ", " +
+                    CodeGenUtilities.BuildStringArrayExpression(fefUme.PositionalArgs) + ", " +
+                    CodeGenUtilities.BuildStringArrayExpression(fefUme.NamedArgKeys) + ", " +
+                    CodeGenUtilities.BuildStringArrayExpression(fefUme.NamedArgValues) + ")";
+                if (dpRequiresRuntimeLookup)
+                {
+                    var dpVarName = "__dp_" + _localCounter++;
+                    Builder.AppendLine(MemberIndent + "    { var " + dpVarName + " = " + dependencyPropertyExpression + ";");
+                    Builder.AppendLine(MemberIndent + "    if (" + dpVarName + " != null) " + factoryVariable + ".SetValue(" + dpVarName + ", " + fefUmeExpr + "); }");
+                }
+                else
+                {
+                    Builder.AppendLine(MemberIndent + "    " + factoryVariable + ".SetValue(" + dependencyPropertyExpression + ", " + fefUmeExpr + ");");
+                }
+                continue;
+            }
+
             var assignmentTargetTypeName = CodeGenUtilities.ResolveFrameworkElementFactoryPropertyTypeName(
                 ownerTypeForDp,
                 assignment.PropertyName,
