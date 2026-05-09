@@ -262,6 +262,37 @@ public class WpfSampleRegressionTests : IClassFixture<WxsgBuildFixture>
     }
 
     [Fact]
+    public void XStatic_ShortType_Sample_Builds_And_Does_Not_Use_NoAssembly_RuntimeResolver()
+    {
+        // Regression for issue #15: {x:Static local:FontHelper.DefaultFont} with a
+        // clr-namespace: prefix that has no assembly= part must NOT be routed through
+        // __WXSG_ResolveXStatic with a bare clr-namespace: token (no assembly=).
+        // That path iterates AppDomain.GetAssemblies() + GetType(), which can throw
+        // FileNotFoundException when an assembly in the process has missing dependencies.
+        // The fix: lower to a direct member-access expression when the namespace is explicit.
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var artifact = BuildSample(
+            "samples/xstatic-shorttype/XStaticShortTypeSample.csproj",
+            "wpf-sample-xstatic-shorttype");
+
+        var generatedCode = artifact.ReadGeneratedCSharp();
+
+        // Must reference FontHelper in some form (direct or assembly-qualified runtime call).
+        Assert.Contains("FontHelper.DefaultFont", generatedCode, StringComparison.Ordinal);
+        Assert.Contains("FontHelper.DefaultSize", generatedCode, StringComparison.Ordinal);
+
+        // Must NOT use the bare (no assembly=) runtime resolver token for these members.
+        Assert.DoesNotContain(
+            "__WXSG_ResolveXStatic(\"{x:Static clr-namespace:XStaticShortTypeSample:FontHelper.",
+            generatedCode,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThemeXStaticRepro_Sample_Builds_And_RawDeferredXaml_Rewritten()
     {
         if (!OperatingSystem.IsWindows())

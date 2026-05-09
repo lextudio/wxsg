@@ -1,0 +1,17 @@
+<Window x:Class="XStaticShortTypeSample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:XStaticShortTypeSample"
+        Title="x:Static Short Type Sample" Height="200" Width="400">
+    <!-- Regression test for issue #15: {x:Static} with a short (unqualified) type name
+         and a clr-namespace: prefix that has no assembly= part. The generator must emit
+         a direct member access (global::XStaticShortTypeSample.FontHelper.DefaultFont)
+         rather than routing through __WXSG_ResolveXStatic, which can crash at runtime
+         when AppDomain assembly scanning triggers loading of missing assemblies. -->
+    <StackPanel Margin="20">
+        <TextBlock x:Name="SampleText"
+                   FontFamily="{x:Static local:FontHelper.DefaultFont}"
+                   FontSize="{x:Static local:FontHelper.DefaultSize}"
+                   Text="Hello from x:Static short-type!" />
+    </StackPanel>
+</Window>

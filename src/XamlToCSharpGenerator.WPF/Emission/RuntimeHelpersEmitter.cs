@@ -562,7 +562,8 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "                var __qualifiedMemberName = __qualifiedTypeName.Substring(__qualifiedMemberDot + 1);");
         sb.AppendLine(i + "                // Try fully-qualified name first: namespace.typename");
         sb.AppendLine(i + "                var __fullyQualifiedTypeName = __clrNamespace + \".\" + __qualifiedTypeNameShort;");
-        sb.AppendLine(i + "                var __qualifiedOwnerType = global::System.Type.GetType(__fullyQualifiedTypeName, throwOnError: false);");
+        sb.AppendLine(i + "                global::System.Type __qualifiedOwnerType = null;");
+        sb.AppendLine(i + "                try { __qualifiedOwnerType = global::System.Type.GetType(__fullyQualifiedTypeName, throwOnError: false); } catch { }");
         sb.AppendLine(i + "                if (__qualifiedOwnerType is null)");
         sb.AppendLine(i + "                {");
         sb.AppendLine(i + "                    // Extract assembly name from format: \"XStaticCustomNsSample;assembly=XStaticCustomNsSample:Converters.CollectionsToComposite\"");
@@ -586,7 +587,7 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "                            var __asmName = __asm.GetName().Name;");
         sb.AppendLine(i + "                            if (string.Equals(__asmName, __targetAsmName, global::System.StringComparison.Ordinal))");
         sb.AppendLine(i + "                            {");
-        sb.AppendLine(i + "                                __qualifiedOwnerType = __asm.GetType(__fullyQualifiedTypeName, throwOnError: false);");
+        sb.AppendLine(i + "                                try { __qualifiedOwnerType = __asm.GetType(__fullyQualifiedTypeName, throwOnError: false); } catch { }");
         sb.AppendLine(i + "                                if (__qualifiedOwnerType is not null) break;");
         sb.AppendLine(i + "                            }");
         sb.AppendLine(i + "                        }");
@@ -595,7 +596,7 @@ internal static class RuntimeHelpersEmitter
         sb.AppendLine(i + "                    {");
         sb.AppendLine(i + "                        foreach (var __asm in __allAssemblies)");
         sb.AppendLine(i + "                        {");
-        sb.AppendLine(i + "                            __qualifiedOwnerType = __asm.GetType(__fullyQualifiedTypeName, throwOnError: false);");
+        sb.AppendLine(i + "                            try { __qualifiedOwnerType = __asm.GetType(__fullyQualifiedTypeName, throwOnError: false); } catch { }");
         sb.AppendLine(i + "                            if (__qualifiedOwnerType is not null) break;");
         sb.AppendLine(i + "                        }");
         sb.AppendLine(i + "                    }");

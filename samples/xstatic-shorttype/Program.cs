@@ -1,0 +1,45 @@
+using System;
+using System.Threading.Tasks;
+using System.Windows;
+
+namespace XStaticShortTypeSample
+{
+    public static class Program
+    {
+        [STAThread]
+        public static void Main()
+        {
+            var app = new Application();
+
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + e.ExceptionObject?.ToString());
+                Environment.Exit(1);
+            };
+
+            app.DispatcherUnhandledException += (s, e) =>
+            {
+                Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + e.Exception.ToString());
+                e.Handled = true;
+                Environment.Exit(1);
+            };
+
+            TaskScheduler.UnobservedTaskException += (s, e) =>
+            {
+                Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + e.Exception.ToString());
+                e.SetObserved();
+                Environment.Exit(1);
+            };
+
+            try
+            {
+                app.Run(new MainWindow());
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("WXSG-SAMPLE-ERROR: " + ex.ToString());
+                Environment.Exit(1);
+            }
+        }
+    }
+}

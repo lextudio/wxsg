@@ -212,14 +212,6 @@ internal static class CodeGenUtilities
             return false;
         }
 
-        // Keep runtime resolver behavior for short owner type names because XML
-        // namespace mappings can fan out to multiple CLR namespaces and runtime
-        // logic probes child namespaces by short type name.
-        if (rawTypeName.IndexOf('.') < 0)
-        {
-            return false;
-        }
-
         clrNamespace = namespaceSegment;
         typeName = rawTypeName.Replace('+', '.');
         memberName = rawMemberName;
