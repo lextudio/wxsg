@@ -7,6 +7,7 @@ using XamlToCSharpGenerator.Core.Models;
 using XamlToCSharpGenerator.Framework.Abstractions;
 using XamlToCSharpGenerator.WPF.Binding;
 using XamlToCSharpGenerator.WPF.Emission;
+using XamlToCSharpGenerator.WPF.Parsing;
 
 namespace XamlToCSharpGenerator.WPF.Framework;
 
@@ -71,13 +72,11 @@ public sealed class WpfFrameworkProfile : IXamlFrameworkProfile
     public IXamlFrameworkEmitter CreateEmitter() => _emitter;
 
     /// <summary>
-    /// WPF files carry no document enrichers (Phase 1).
-    /// Avalonia uses enrichers to inject x:Name members; WPF relies on the name scope
-    /// populated during BAML loading (Phase 1) and will switch to direct object construction
-    /// in Phase 3.
+    /// WPF document enrichers extract features like x:Code blocks.
     /// </summary>
     public ImmutableArray<IXamlDocumentEnricher> CreateDocumentEnrichers() =>
-        ImmutableArray<IXamlDocumentEnricher>.Empty;
+        ImmutableArray.Create<IXamlDocumentEnricher>(
+            WpfDocumentFeatureEnricher.Instance);
 
     /// <summary>
     /// MAUI-style "simpler XAML" support for WXSG:

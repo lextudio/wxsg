@@ -130,6 +130,12 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
             startupWindowType = ResolveStartupWindowType(viewModel, doc);
         }
 
+        if (doc.IsClassBacked && doc.CodeBlocks.Length > 0)
+        {
+            EmitCodeBlocks(emitter, doc);
+            sb.AppendLine();
+        }
+
         EmitInitializeComponent(emitter, viewModel, startupWindowType, hasUserOnStartupOverride);
 
         if (IsApplicationDefinition(viewModel))
@@ -278,6 +284,21 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
 
         EmitHotReloadReset(emitter, viewModel);
         RuntimeHelpersEmitter.Emit(emitter, viewModel.Document.ClassFullName);
+    }
+
+    private static void EmitCodeBlocks(GraphEmitter emitter, XamlDocumentModel doc)
+    {
+        var sb = emitter.Builder;
+        var i = emitter.MemberIndent;
+
+        foreach (var codeBlock in doc.CodeBlocks)
+        {
+            sb.AppendLine(i + "#line " + codeBlock.Line.ToString(CultureInfo.InvariantCulture));
+            sb.Append(codeBlock.RawCode.TrimStart('\r', '\n'));
+            sb.AppendLine();
+            sb.AppendLine(i + "#line default");
+            sb.AppendLine();
+        }
     }
 
     private static void EmitHotReloadReset(GraphEmitter emitter, ResolvedViewModel viewModel)
