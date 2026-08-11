@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using XamlToCSharpGenerator.Core.Models;
 using XamlToCSharpGenerator.Core.Parsing;
+using XamlToCSharpGenerator.WPF.Models;
 
 namespace XamlToCSharpGenerator.WPF.Emission;
 
@@ -983,7 +984,7 @@ internal sealed class GraphEmitter
         var localVariable = "__node" + _localCounter.ToString(CultureInfo.InvariantCulture);
         _localCounter++;
 
-        if (child.HasSemantic(ResolvedObjectNodeSemanticFlags.IsXamlArray))
+        if (XamlArrayRegistry.IsXamlArray(child))
         {
             var arrayItems = new List<string>(child.Children.Length);
             foreach (var arrayChild in child.Children)

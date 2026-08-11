@@ -5,6 +5,7 @@ using System.Xml.Linq;
 using XamlToCSharpGenerator.Core.Abstractions;
 using XamlToCSharpGenerator.Core.Models;
 using XamlToCSharpGenerator.Core.Parsing;
+using XamlToCSharpGenerator.WPF.Models;
 
 namespace XamlToCSharpGenerator.WPF.Parsing;
 
@@ -22,7 +23,7 @@ public sealed class WpfDocumentFeatureEnricher : IXamlDocumentEnricher
         XamlDocumentModel document,
         XamlDocumentParseContext parseContext)
     {
-        var codeBlocks = ImmutableArray.CreateBuilder<XamlCodeBlockDefinition>();
+        var codeBlocks = ImmutableArray.CreateBuilder<WxsgCodeBlock>();
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticInfo>();
 
         foreach (var element in parseContext.RootElement.DescendantsAndSelf())
@@ -35,18 +36,19 @@ public sealed class WpfDocumentFeatureEnricher : IXamlDocumentEnricher
             AddElementFeatures(element, parseContext.ConditionalNamespacesByRawUri, codeBlocks, diagnostics, document);
         }
 
-        var enriched = document with
-        {
-            CodeBlocks = codeBlocks.ToImmutable()
-        };
+        // The upstream engine's XamlDocumentModel carries no x:Code state, so the blocks
+        // travel through CodeBlockRegistry keyed by this exact model instance - which is
+        // the same instance the binders and emitters receive downstream (no clones of the
+        // model are made between enrichment and emission).
+        CodeBlockRegistry.Set(document, codeBlocks.ToImmutable());
 
-        return (enriched, diagnostics.ToImmutable());
+        return (document, diagnostics.ToImmutable());
     }
 
     private static void AddElementFeatures(
         XElement element,
         ImmutableDictionary<string, ConditionalXamlExpression> conditionalNamespacesByRawUri,
-        ImmutableArray<XamlCodeBlockDefinition>.Builder codeBlocks,
+        ImmutableArray<WxsgCodeBlock>.Builder codeBlocks,
         ImmutableArray<DiagnosticInfo>.Builder diagnostics,
         XamlDocumentModel document)
     {
@@ -76,7 +78,7 @@ public sealed class WpfDocumentFeatureEnricher : IXamlDocumentEnricher
             element.Name.NamespaceName,
             conditionalNamespacesByRawUri);
 
-        codeBlocks.Add(new XamlCodeBlockDefinition(
+        codeBlocks.Add(new WxsgCodeBlock(
             RawCode: rawCode,
             Line: line,
             Column: column,

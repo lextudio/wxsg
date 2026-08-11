@@ -5,6 +5,7 @@ using XamlToCSharpGenerator.Core.Abstractions;
 using XamlToCSharpGenerator.Core.Models;
 using XamlToCSharpGenerator.Core.Parsing;
 using XamlToCSharpGenerator.WPF.Emission;
+using XamlToCSharpGenerator.WPF.Models;
 
 namespace XamlToCSharpGenerator.WPF.Binding;
 
@@ -71,6 +72,10 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             }
         }
 
+        // AXSG's ResolvedViewModel no longer carries this flag, so hand it to the emitter
+        // through StartupOverrideRegistry keyed by the same model instance.
+        StartupOverrideRegistry.Set(document, hasUserOnStartupOverride);
+
         // WPF relative pack URI: /AssemblyName;component/SubFolder/File.xaml
         var buildUri = BuildPackUri(document, compilation);
 
@@ -85,7 +90,6 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             EmitNameScopeRegistration: false,
             EmitStaticResourceResolver: false,
             HasXBind: false,
-            HasUserOnStartupOverride: hasUserOnStartupOverride,
             RootObject: rootNode,
             NamedElements: namedElements,
             Resources: ImmutableArray<ResolvedResourceDefinition>.Empty,
@@ -321,7 +325,7 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             children.Add(BindObjectNode(child, context));
         }
 
-        return new ResolvedObjectNode(
+        var nodeModel = new ResolvedObjectNode(
             KeyExpression: BuildObjectNodeKeyExpression(node.Key),
             Name: node.Name,
             TypeName: "global::System.Object",
@@ -340,7 +344,9 @@ public sealed class WpfSemanticBinder : IXamlSemanticBinder
             Column: node.Column,
             Condition: node.Condition,
             ContentPropertyTypeName: elementTypeName,
-            SemanticFlags: ResolvedObjectNodeSemanticFlags.IsXamlArray);
+            SemanticFlags: ResolvedObjectNodeSemanticFlags.None);
+        XamlArrayRegistry.Set(nodeModel);
+        return nodeModel;
     }
 
     private static void BindPropertyAssignment(

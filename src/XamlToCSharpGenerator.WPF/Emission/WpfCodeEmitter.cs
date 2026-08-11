@@ -9,6 +9,7 @@ using System.Text;
 using XamlToCSharpGenerator.Core.Abstractions;
 using XamlToCSharpGenerator.Core.Models;
 using XamlToCSharpGenerator.Core.Parsing;
+using XamlToCSharpGenerator.WPF.Models;
 
 namespace XamlToCSharpGenerator.WPF.Emission;
 
@@ -124,13 +125,13 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         sb.AppendLine();
 
         string? startupWindowType = null;
-        var hasUserOnStartupOverride = viewModel.HasUserOnStartupOverride;
+        var hasUserOnStartupOverride = StartupOverrideRegistry.Get(viewModel.Document);
         if (IsApplicationDefinition(viewModel))
         {
             startupWindowType = ResolveStartupWindowType(viewModel, doc);
         }
 
-        if (doc.IsClassBacked && doc.CodeBlocks.Length > 0)
+        if (doc.IsClassBacked && CodeBlockRegistry.Get(doc).Length > 0)
         {
             EmitCodeBlocks(emitter, doc);
             sb.AppendLine();
@@ -291,7 +292,7 @@ public sealed class WpfCodeEmitter : IXamlCodeEmitter
         var sb = emitter.Builder;
         var i = emitter.MemberIndent;
 
-        foreach (var codeBlock in doc.CodeBlocks)
+        foreach (var codeBlock in CodeBlockRegistry.Get(doc))
         {
             sb.AppendLine(i + "#line " + codeBlock.Line.ToString(CultureInfo.InvariantCulture));
             sb.Append(codeBlock.RawCode.TrimStart('\r', '\n'));
