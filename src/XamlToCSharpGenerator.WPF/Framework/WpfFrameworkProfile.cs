@@ -52,6 +52,26 @@ public sealed class WpfFrameworkProfile : IXamlFrameworkProfile
     public static WpfFrameworkProfile VisualBasicInstance { get; } =
         new("WPF_VB", new WpfVisualBasicCodeEmitter());
 
+    /// <summary>
+    /// WPF reference assemblies do not reliably expose enough XmlnsDefinitionAttribute metadata
+    /// during a fast (Tier-1) language-service startup, so the WPF language server seeds a
+    /// synthetic xmlns map for these namespaces to guarantee core control completions before the
+    /// project's own packages load. Owned by the profile so the list belongs to the framework
+    /// rather than to a single server's source.
+    /// </summary>
+    public ImmutableArray<string> Tier1SeedClrNamespaces { get; } =
+    [
+        "System.Windows",
+        "System.Windows.Controls",
+        "System.Windows.Controls.Primitives",
+        "System.Windows.Data",
+        "System.Windows.Documents",
+        "System.Windows.Input",
+        "System.Windows.Media",
+        "System.Windows.Navigation",
+        "System.Windows.Shapes"
+    ];
+
     private readonly string _profileId;
     private readonly IXamlFrameworkEmitter _emitter;
 
